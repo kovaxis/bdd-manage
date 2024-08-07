@@ -28,7 +28,8 @@ def parse_args() -> argparse.Namespace:
     - lock: Bloquea la cuenta de todos los usuarios de la lista.
     - unlock: Desbloquea las cuentas de todos los usuarios de la lista.
     - kick: Detiene las conexiones actuales de todos los usuarios de la lista.
-    """
+    """,
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     p.add_argument("lista_alumnos", help="Archivo .csv con la lista de alumnos")
     p.add_argument(
