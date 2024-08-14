@@ -11,6 +11,7 @@ import re
 import sys
 import subprocess
 import os
+import traceback
 
 
 def parse_args() -> argparse.Namespace:
@@ -148,27 +149,40 @@ if __name__ == "__main__":
         case "create":
             # Codigo para crear los usuarios
             for user in users.values():
-                name = user.id
-                pwd = user.n_alumno
-                subprocess.run(
-                    ["sudo", "useradd", name, "-s", "/bin/bash", "-m"], check=True
-                )
-                subprocess.run(
-                    ["sudo", "passwd", name], input=f"{pwd}\n{pwd}\n".encode()
-                )
-                subprocess.run(["sudo", "chmod", "-R", "2750", f"/home/{name}"])
-                subprocess.run(
-                    ["sudo", "chown", "-R", f"{name}:www-data", f"/home/{name}"]
-                )
-                if conf.template:
-                    ensure(
-                        Path(conf.template).is_dir(),
-                        f"template path '{conf.template}' is not a directory",
+                try:
+                    name = user.id
+                    pwd = user.n_alumno
+                    subprocess.run(
+                        ["sudo", "useradd", name, "-s", "/bin/bash", "-m"], check=True
                     )
-                    os.system(
-                        f"sudo -u {name} cp -r {Path(conf.template).joinpath('*')} /home/{name}/"
+                    subprocess.run(
+                        ["sudo", "passwd", name],
+                        input=f"{pwd}\n{pwd}\n".encode(),
+                        check=True,
                     )
-                print(f"created user {name}")
+                    subprocess.run(
+                        ["sudo", "chmod", "-R", "2750", f"/home/{name}"], check=True
+                    )
+                    subprocess.run(
+                        ["sudo", "chown", "-R", f"{name}:www-data", f"/home/{name}"],
+                        check=True,
+                    )
+                    if conf.template:
+                        ensure(
+                            Path(conf.template).is_dir(),
+                            f"template path '{conf.template}' is not a directory",
+                        )
+                        ensure(
+                            os.system(
+                                f"sudo -u {name} cp -r {Path(conf.template).joinpath('*')} /home/{name}/"
+                            )
+                            == 0,
+                            "copying home template failed",
+                        )
+                    print(f"created user {name}")
+                except subprocess.CalledProcessError:
+                    traceback.print_exc()
+                    print(f"failed to create user {user.id}")
         case "destroy":
             # Codigo para destruir los usuarios
             for user in users.values():
