@@ -4,6 +4,7 @@
 # Correr el comando con el argumento `--help` para ver la descripcion y posibles comandos.
 
 import argparse
+import contextlib
 import csv
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,16 +54,18 @@ class User:
 
     id: str
     n_alumno: str
-    run: str
+    run: str = ""
+    section: str = ""
 
 
-# Regular expressions que matchean con los nombres de los distintos campos del .csv
-# Case-insensitive
-FIELDS = {
-    "run": r"run",
-    "n_alumno": r"n.{0,3}\salumno",
-    "id": r"u?id",
-}
+@contextlib.contextmanager
+def exception_context(msg: str):
+    try:
+        yield
+    except Exception as ex:
+        msg = f"{msg}: {ex.args[0]}" if ex.args else str(msg)
+        ex.args = (msg,) + ex.args[1:]
+        raise
 
 
 def ensure(cond: bool, *ctx):
@@ -71,8 +74,39 @@ def ensure(cond: bool, *ctx):
     """
 
     if not cond:
-        print(": ".join(("assertion failed",) + ctx))
-        sys.exit(1)
+        msg = ": ".join(("assertion failed",) + ctx)
+        raise AssertionError(msg)
+
+
+def find_field(record: dict[str, str], regex: str) -> str | None:
+    value = None
+    for k, v in record.items():
+        if re.fullmatch(regex, k, re.IGNORECASE):
+            if value is not None:
+                raise RuntimeError(f"duplicate field {k}")
+            value = v
+    return value
+
+
+def get_field(record: dict[str, str], regex: str) -> str:
+    value = find_field(record, regex)
+    if value is None:
+        raise RuntimeError(f"field {regex} not found")
+    return value
+
+
+def read_user(record: dict[str, str]) -> User:
+    uid = find_field(record, r"u?id")
+    if uid is None:
+        email = get_field(record, r"e-?mail")
+        ensure("@" in email, "email @")
+        uid = email[: email.find("@")]
+    return User(
+        id=uid,
+        n_alumno=get_field(record, r"n.{0,3}\salumno"),
+        section=find_field(record, r"secci.{0,3}n") or "",
+        run=find_field(record, r"run") or "",
+    )
 
 
 def validate_users(users: dict[str, User]):
@@ -81,47 +115,28 @@ def validate_users(users: dict[str, User]):
     """
     ensure(len(users) > 0, "no users found in csv file")
     for user in users.values():
-        ctx = f"user {user}"
-        ensure(re.fullmatch(r"[a-zA-Z0-9._-]{1,24}", user.id), "user id", ctx)
-        ensure(re.fullmatch(r"[a-zA-Z]", user.id[0]), "user id start", ctx)
-        ensure(re.fullmatch(r"[a-zA-Z0-9]", user.id[-1]), "user id end", ctx)
-        ensure(re.fullmatch(r"[0-9A-Za-z]{1,30}", user.n_alumno), "n alumno", ctx)
-        ensure(re.fullmatch(r"[0-9]{1,12}-[0-9Kk]", user.run), "run", ctx)
+        with exception_context(f"user {user}"):
+            ensure(re.fullmatch(r"[a-zA-Z0-9._-]{1,24}", user.id), "user id")
+            ensure(re.fullmatch(r"[a-zA-Z]", user.id[0]), "user id start")
+            ensure(re.fullmatch(r"[a-zA-Z0-9]", user.id[-1]), "user id end")
+            ensure(re.fullmatch(r"[0-9A-Za-z]{1,30}", user.n_alumno), "n alumno")
+            ensure(re.fullmatch(r"[0-9]{1,12}-[0-9Kk]", user.run), "run")
 
 
-def read_users(conf: argparse.Namespace) -> dict[str, User]:
+def read_users(list_path: Path) -> dict[str, User]:
     """
     Leer el CSV de los usuarios.
     """
     try:
         users: dict[str, User] = {}
-        list_path = Path(__file__).with_name(conf.lista_alumnos)
         with open(list_path, encoding="utf-8", newline="") as file:
             line = 0
             for row in csv.DictReader(file):
-                ctx = f"row at line {line} ({row})"
                 line += 1
-                userdata = {}
-                for key, pattern in FIELDS.items():
-                    regex = re.compile(pattern, re.IGNORECASE)
-                    value = None
-                    for k, v in row.items():
-                        if regex.fullmatch(k):
-                            ensure(
-                                value is None,
-                                f"duplicate field {key}",
-                                ctx,
-                            )
-                            value = v
-                    ensure(
-                        value is not None,
-                        f"missing field {key}",
-                        ctx,
-                    )
-                    userdata[key] = value
-                user = User(**userdata)
-                ensure(user.id not in users, f"duplicate user {user.id}")
-                users[user.id] = user
+                with exception_context(f"row at line {line} ({row})"):
+                    user = read_user(row)
+                    ensure(user.id not in users, f"duplicate user {user.id}")
+                    users[user.id] = user
         validate_users(users)
         print(f"read {len(users)} valid users")
         return users
@@ -135,7 +150,7 @@ def read_users(conf: argparse.Namespace) -> dict[str, User]:
 
 if __name__ == "__main__":
     conf = parse_args()
-    users = read_users(conf)
+    users = read_users(Path(__file__).with_name(conf.lista_alumnos))
 
     match conf.accion:
         case "create":
