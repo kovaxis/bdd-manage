@@ -54,7 +54,6 @@ class User:
     id: str
     n_alumno: str
     run: str
-    seccion: str = ""
 
 
 # Regular expressions que matchean con los nombres de los distintos campos del .csv
@@ -62,7 +61,6 @@ class User:
 FIELDS = {
     "run": r"run",
     "n_alumno": r"n.{0,3}\salumno",
-    "seccion": r"secci.{1,3}n",
     "id": r"u?id",
 }
 
@@ -89,12 +87,6 @@ def validate_users(users: dict[str, User]):
         ensure(re.fullmatch(r"[a-zA-Z0-9]", user.id[-1]), "user id end", ctx)
         ensure(re.fullmatch(r"[0-9A-Za-z]{1,30}", user.n_alumno), "n alumno", ctx)
         ensure(re.fullmatch(r"[0-9]{1,12}-[0-9Kk]", user.run), "run", ctx)
-        ensure(re.fullmatch(r"[0-9]{1,3}", user.seccion), "seccion", ctx)
-    sections = {user.seccion for user in users.values()}
-    if len(sections) > 1:
-        print(
-            f"trabajando con {len(users)} usuarios de las secciones {', '.join(sections)}"
-        )
 
 
 def read_users(conf: argparse.Namespace) -> dict[str, User]:
