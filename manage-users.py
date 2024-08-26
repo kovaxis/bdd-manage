@@ -77,6 +77,7 @@ class UserScan:
     ultimo_cambio_detectado: datetime
     hash: str
     mtime: datetime
+    scantime: datetime
 
 
 @contextlib.contextmanager
@@ -323,13 +324,22 @@ if __name__ == "__main__":
                     h = hash_filesystem(home).hex()
                     mtime = get_mtime(home)
                     old = userscan.get(user.id)
-                    oldh = None if old is None else old.hash
-                    change = scantime if h != oldh else old.ultimo_cambio_detectado
+                    if old is None:
+                        # Primera vez que se escanea
+                        change = min(mtime, scantime)
+                    else:
+                        if h == old.hash:
+                            # No ha cambiado desde el ultimo scan
+                            change = min(old.ultimo_cambio_detectado, scantime)
+                        else:
+                            # Cambió desde el último scan
+                            change = max(old.scantime, mtime)
                     userscan[user.id] = UserScan(
                         id=user.id,
                         ultimo_cambio_detectado=change,
                         hash=h,
                         mtime=mtime,
+                        scantime=scantime,
                     )
                     print(f"scanned user {user.id}")
                 write_userscan(scan_path, userscan)
