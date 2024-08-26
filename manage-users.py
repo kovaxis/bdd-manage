@@ -302,6 +302,7 @@ if __name__ == "__main__":
             if scan_path.exists():
                 userscan = read_userscan(scan_path)
             try:
+                print("locking users")
                 for user in users.values():
                     subprocess.run(["sudo", "passwd", "-l", user.id])
                 print("locked all users")
@@ -321,6 +322,7 @@ if __name__ == "__main__":
                     print(f"scanned user {user.id}")
                 write_userscan(scan_path, userscan)
             finally:
+                print("unlocking users")
                 for user in users.values():
                     try:
                         for user in users.values():
