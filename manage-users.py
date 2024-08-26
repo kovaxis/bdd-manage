@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         "--template",
         help="Directorio con los archivos default que cada usuario tendrá en su carpeta home",
     )
+    p.add_argument(
+        "--lock",
+        help="Lockear los usuarios mientras se escanean las entregas.",
+        action="store_true",
+    )
     return p.parse_args()
 
 
@@ -302,10 +307,11 @@ if __name__ == "__main__":
             if scan_path.exists():
                 userscan = read_userscan(scan_path)
             try:
-                print("locking users")
-                for user in users.values():
-                    subprocess.run(["sudo", "passwd", "-l", user.id])
-                print("locked all users")
+                if conf.lock:
+                    print("locking users")
+                    for user in users.values():
+                        subprocess.run(["sudo", "passwd", "-l", user.id])
+                    print("locked all users")
                 for user in users.values():
                     home = Path(f"/home/{user.id}")
                     h = hash_filesystem(home).hex()
@@ -322,14 +328,15 @@ if __name__ == "__main__":
                     print(f"scanned user {user.id}")
                 write_userscan(scan_path, userscan)
             finally:
-                print("unlocking users")
-                for user in users.values():
-                    try:
-                        for user in users.values():
-                            subprocess.run(["sudo", "passwd", "-u", user.id])
-                    except subprocess.CalledProcessError:
-                        traceback.print_exc()
-                print("unlocked users")
+                if conf.lock:
+                    print("unlocking users")
+                    for user in users.values():
+                        try:
+                            for user in users.values():
+                                subprocess.run(["sudo", "passwd", "-u", user.id])
+                        except subprocess.CalledProcessError:
+                            traceback.print_exc()
+                    print("unlocked users")
 
         case _:
             raise RuntimeError(f"unknown action {conf.accion}")

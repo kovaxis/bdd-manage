@@ -2,3 +2,4 @@ __pycache__
 /lista_alumnos*
 !/lista_alumnos.csv.example
 /user_template
+.~*
