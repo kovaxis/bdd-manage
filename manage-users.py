@@ -226,7 +226,7 @@ class FsInfo:
 
 def visit_fs(path: Path) -> FsInfo:
     hx = good_hash()
-    mtime = path.lstat().st_mtime
+    mtime = datetime.fromtimestamp(path.lstat().st_mtime)
     has_php = False
     try:
         if path.is_dir():
