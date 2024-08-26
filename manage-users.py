@@ -192,7 +192,7 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
 
 def write_userscan(path: Path, userscan: dict[str, UserScan]):
     with exception_context(f"escribiendo csv de usercan en {path}"):
-        with open(path, encoding="utf-8", newline="") as file:
+        with open(path, "w", encoding="utf-8", newline="") as file:
             fields = dataclasses.fields(UserScan)
             writer = csv.DictWriter(file, fieldnames=[field.name for field in fields])
             writer.writeheader()
