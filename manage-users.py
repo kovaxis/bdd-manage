@@ -212,15 +212,18 @@ def hash_filesystem(path: Path, root: Path | None = None) -> bytes:
     hx = good_hash()
     hx.update(b"d" if path.is_dir() else b"f")
     hx.update(path.relative_to(root).as_posix().encode())
-    if path.is_dir():
-        hashes: list[str] = []
-        for subfile in path.iterdir():
-            hashes.append(hash_filesystem(subfile))
-        hashes.sort()
-        for h in hashes:
-            hx.update(h)
-    else:
-        hx.update(path.read_bytes())
+    try:
+        if path.is_dir():
+            hashes: list[str] = []
+            for subfile in path.iterdir():
+                hashes.append(hash_filesystem(subfile))
+            hashes.sort()
+            for h in hashes:
+                hx.update(h)
+        else:
+            hx.update(path.read_bytes())
+    except PermissionError:
+        pass
     return hx.digest()
 
 
