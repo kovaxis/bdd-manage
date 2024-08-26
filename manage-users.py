@@ -233,7 +233,7 @@ def visit_fs(path: Path) -> FsInfo:
             hashes: list[bytes] = []
             for subpath in path.iterdir():
                 sub = visit_fs(subpath)
-                hashes.append(good_hash(subpath.name).digest() + sub.hash)
+                hashes.append(good_hash(subpath.name.encode()).digest() + sub.hash)
                 mtime = max(mtime, sub.mtime)
                 has_php = has_php or sub.has_php
             hashes.sort()
