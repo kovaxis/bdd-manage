@@ -195,6 +195,8 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
                         raise RuntimeError(f"value for field {field.name} not found")
                     if field.type is datetime:
                         x = datetime.fromisoformat(x)
+                    if field.type is bool:
+                        x = bool(int(x))
                     args[field.name] = x
                 user = UserScan(**args)
                 userscan[user.id] = user
@@ -213,6 +215,8 @@ def write_userscan(path: Path, userscan: dict[str, UserScan]):
                     x = getattr(user, field.name)
                     if field.type is datetime:
                         x = datetime.isoformat(x)
+                    if field.type is bool:
+                        x = "1" if x else "0"
                     row[field.name] = x
                 writer.writerow(row)
 
