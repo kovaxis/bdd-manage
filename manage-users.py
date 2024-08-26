@@ -230,8 +230,11 @@ def hash_filesystem(path: Path, root: Path | None = None) -> bytes:
 def get_mtime(path: Path) -> datetime:
     t = datetime.fromtimestamp(path.lstat().st_mtime)
     if path.is_dir():
-        for subpath in path.iterdir():
-            t = max(t, get_mtime(subpath))
+        try:
+            for subpath in path.iterdir():
+                t = max(t, get_mtime(subpath))
+        except PermissionError:
+            pass
     return t
 
 
