@@ -298,7 +298,9 @@ if __name__ == "__main__":
             scantime = datetime.now()
             scan_path = Path(conf.lista_alumnos)
             scan_path = scan_path.with_stem(scan_path.stem + "_scan")
-            userscan = read_userscan(scan_path)
+            userscan: dict[str, UserScan] = {}
+            if scan_path.exists():
+                userscan = read_userscan(scan_path)
             try:
                 for user in users.values():
                     subprocess.run(["sudo", "passwd", "-l", user.id])
