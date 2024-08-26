@@ -16,6 +16,8 @@ import subprocess
 import os
 import traceback
 from hashlib import blake2b as good_hash
+from types import NoneType
+from typing import Optional, Union, get_args, get_origin
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,8 +78,9 @@ class UserScan:
     id: str
     ultimo_cambio_detectado: datetime
     hash: str
-    mtime: datetime
     scantime: datetime
+    mtime: datetime
+    has_php: Optional[bool]
 
 
 @contextlib.contextmanager
@@ -182,7 +185,17 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
                 args = {}
                 for field in fields:
                     if field.name in row:
-                        x = row[field.name]
+                        x = row.get(field.name)
+                        if (
+                            not (
+                                get_origin(field.type) == Union
+                                and NoneType in get_args(field.type)
+                            )
+                            and x is None
+                        ):
+                            raise RuntimeError(
+                                f"value for field {field.name} not found"
+                            )
                         if field.type is datetime:
                             x = datetime.fromisoformat(x)
                         args[field.name] = x
@@ -207,36 +220,37 @@ def write_userscan(path: Path, userscan: dict[str, UserScan]):
                 writer.writerow(row)
 
 
-def hash_filesystem(path: Path, root: Path | None = None) -> bytes:
-    if root is None:
-        root = path
+@dataclass
+class FsInfo:
+    hash: bytes
+    mtime: datetime
+    has_php: bool
+
+
+def visit_fs(path: Path) -> FsInfo:
     hx = good_hash()
-    hx.update(b"d" if path.is_dir() else b"f")
-    hx.update(path.relative_to(root).as_posix().encode())
+    mtime = path.lstat().st_mtime
+    has_php = False
     try:
         if path.is_dir():
-            hashes: list[str] = []
-            for subfile in path.iterdir():
-                hashes.append(hash_filesystem(subfile))
+            hashes: list[bytes] = []
+            for subpath in path.iterdir():
+                sub = visit_fs(subpath)
+                hashes.append(good_hash(subpath.name).digest() + sub.hash)
+                mtime = max(mtime, sub.mtime)
+                has_php = has_php or sub.has_php
             hashes.sort()
+            hx.update(b"d")
             for h in hashes:
                 hx.update(h)
         else:
+            hx.update(b"f")
             hx.update(path.read_bytes())
+            if path.suffix == ".php":
+                has_php = True
     except PermissionError:
         pass
-    return hx.digest()
-
-
-def get_mtime(path: Path) -> datetime:
-    t = datetime.fromtimestamp(path.lstat().st_mtime)
-    if path.is_dir():
-        try:
-            for subpath in path.iterdir():
-                t = max(t, get_mtime(subpath))
-        except PermissionError:
-            pass
-    return t
+    return FsInfo(hash=hx.digest(), mtime=mtime, has_php=has_php)
 
 
 if __name__ == "__main__":
@@ -321,25 +335,25 @@ if __name__ == "__main__":
                     print("locked all users")
                 for user in users.values():
                     home = Path(f"/home/{user.id}")
-                    h = hash_filesystem(home).hex()
-                    mtime = get_mtime(home)
+                    info = visit_fs(home)
                     old = userscan.get(user.id)
                     if old is None:
                         # Primera vez que se escanea
-                        change = min(mtime, scantime)
+                        change = min(info.mtime, scantime)
                     else:
-                        if h == old.hash:
+                        if info.hash.hex() == old.hash:
                             # No ha cambiado desde el ultimo scan
                             change = min(old.ultimo_cambio_detectado, scantime)
                         else:
                             # Cambió desde el último scan
-                            change = max(old.scantime, mtime)
+                            change = max(old.scantime, info.mtime)
                     userscan[user.id] = UserScan(
                         id=user.id,
                         ultimo_cambio_detectado=change,
-                        hash=h,
-                        mtime=mtime,
+                        hash=info.hash.hex(),
+                        mtime=info.mtime,
                         scantime=scantime,
+                        has_php=info.has_php,
                     )
                     print(f"scanned user {user.id}")
                 write_userscan(scan_path, userscan)
