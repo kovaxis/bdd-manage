@@ -296,9 +296,9 @@ if __name__ == "__main__":
         case "scan":
             # Código para escanear las carpetas HOME y determinar horas de entrega
             scantime = datetime.now()
-            path = Path(conf.lista_alumnos)
-            path = path.with_stem(path.stem() + "_scan")
-            userscan = read_userscan(path)
+            scan_path = Path(conf.lista_alumnos)
+            scan_path = scan_path.with_stem(scan_path.stem() + "_scan")
+            userscan = read_userscan(scan_path)
             try:
                 for user in users.values():
                     subprocess.run(["sudo", "passwd", "-l", user.id])
@@ -317,7 +317,7 @@ if __name__ == "__main__":
                         mtime=mtime,
                     )
                     print(f"scanned user {user.id}")
-                write_userscan(path, userscan)
+                write_userscan(scan_path, userscan)
             finally:
                 for user in users.values():
                     try:
