@@ -297,7 +297,7 @@ if __name__ == "__main__":
             # Código para escanear las carpetas HOME y determinar horas de entrega
             scantime = datetime.now()
             scan_path = Path(conf.lista_alumnos)
-            scan_path = scan_path.with_stem(scan_path.stem() + "_scan")
+            scan_path = scan_path.with_stem(scan_path.stem + "_scan")
             userscan = read_userscan(scan_path)
             try:
                 for user in users.values():
