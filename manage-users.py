@@ -184,21 +184,18 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
             for row in csv.DictReader(file):
                 args = {}
                 for field in fields:
-                    if field.name in row:
-                        x = row.get(field.name)
-                        if (
-                            not (
-                                get_origin(field.type) == Union
-                                and NoneType in get_args(field.type)
-                            )
-                            and x is None
-                        ):
-                            raise RuntimeError(
-                                f"value for field {field.name} not found"
-                            )
-                        if field.type is datetime:
-                            x = datetime.fromisoformat(x)
-                        args[field.name] = x
+                    x = row.get(field.name)
+                    if (
+                        not (
+                            get_origin(field.type) == Union
+                            and NoneType in get_args(field.type)
+                        )
+                        and x is None
+                    ):
+                        raise RuntimeError(f"value for field {field.name} not found")
+                    if field.type is datetime:
+                        x = datetime.fromisoformat(x)
+                    args[field.name] = x
                 user = UserScan(**args)
                 userscan[user.id] = user
         return userscan
