@@ -85,6 +85,7 @@ class UserScan:
     hash: str
     scantime: datetime
     mtime: datetime
+    last_modification: Optional[str]
     has_php: Optional[bool]
 
 
@@ -230,12 +231,14 @@ def write_userscan(path: Path, userscan: dict[str, UserScan]):
 class FsInfo:
     hash: bytes
     mtime: datetime
+    last_modification: Path
     has_php: bool
 
 
 def visit_fs(path: Path) -> FsInfo:
     hx = good_hash()
     mtime = datetime.fromtimestamp(path.lstat().st_mtime)
+    last_modification = path
     has_php = False
     try:
         if path.is_dir():
@@ -245,7 +248,9 @@ def visit_fs(path: Path) -> FsInfo:
                     continue
                 sub = visit_fs(subpath)
                 hashes.append(good_hash(subpath.name.encode()).digest() + sub.hash)
-                mtime = max(mtime, sub.mtime)
+                if sub.mtime > mtime:
+                    mtime = sub.mtime
+                    last_modification = sub.last_modification
                 has_php = has_php or sub.has_php
             hashes.sort()
             hx.update(b"d")
@@ -258,7 +263,12 @@ def visit_fs(path: Path) -> FsInfo:
                 has_php = True
     except PermissionError:
         pass
-    return FsInfo(hash=hx.digest(), mtime=mtime, has_php=has_php)
+    return FsInfo(
+        hash=hx.digest(),
+        mtime=mtime,
+        last_modification=last_modification,
+        has_php=has_php,
+    )
 
 
 if __name__ == "__main__":
@@ -377,6 +387,7 @@ if __name__ == "__main__":
                         ultimo_cambio_detectado=change,
                         hash=info.hash.hex(),
                         mtime=info.mtime,
+                        last_modification=str(info.last_modification.as_posix()),
                         scantime=scantime,
                         has_php=info.has_php,
                     )
