@@ -36,13 +36,14 @@ def parse_args() -> argparse.Namespace:
     - unlock: Desbloquea las cuentas de todos los usuarios de la lista.
     - kick: Detiene las conexiones actuales de todos los usuarios de la lista.
     - scan: Escanear las carpetas HOME y recordar información sobre la fecha de entrega.
+    - run: Correr un comando arbitrario por cada usuario. Reemplaza {id} por el ID del usuario. También está disponible {n_alumno} y {rut}.
     """,
         formatter_class=argparse.RawTextHelpFormatter,
     )
     p.add_argument("lista_alumnos", help="Archivo .csv con la lista de alumnos")
     p.add_argument(
         "accion",
-        choices=["create", "destroy", "lock", "unlock", "kick", "scan"],
+        choices=["create", "destroy", "lock", "unlock", "kick", "scan", "run"],
         help="Qué acción realizar",
     )
     p.add_argument(
@@ -53,6 +54,10 @@ def parse_args() -> argparse.Namespace:
         "--lock",
         help="Lockear los usuarios mientras se escanean las entregas.",
         action="store_true",
+    )
+    p.add_argument(
+        "--cmd",
+        help="Comando a correr con `run`.",
     )
     return p.parse_args()
 
@@ -130,7 +135,7 @@ def read_user(record: dict[str, str]) -> User:
         id=uid,
         n_alumno=get_field(record, r"n.{0,3}\salumno"),
         section=find_field(record, r"secci.{0,3}n") or "",
-        run=find_field(record, r"run") or "",
+        run=find_field(record, r"ru[nt]") or "",
     )
 
 
@@ -320,6 +325,23 @@ if __name__ == "__main__":
             for user in users.values():
                 subprocess.run(["killall", "-9", "--user", user.id])
                 print(f"killed processes of user {user.id}")
+        case "run":
+            # Código para correr un comando arbitrario por usuario
+            for user in users.values():
+                cmd = conf.cmd
+                if not cmd:
+                    print("se debe proveer un comando con --cmd")
+                    sys.exit(1)
+                assert isinstance(cmd, str)
+                cmd = cmd.replace("{id}", user.id)
+                cmd = cmd.replace("{n_alumno}", user.n_alumno)
+                cmd = cmd.replace("{run}", user.run)
+                print(f'running command "{cmd}"')
+                result = os.system(cmd)
+                if result != 0:
+                    print(
+                        f"el comando falló para el usuario {user.id} (exit code {result})"
+                    )
         case "scan":
             # Código para escanear las carpetas HOME y determinar horas de entrega
             scantime = datetime.now()
