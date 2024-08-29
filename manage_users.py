@@ -241,6 +241,8 @@ def visit_fs(path: Path) -> FsInfo:
         if path.is_dir():
             hashes: list[bytes] = []
             for subpath in path.iterdir():
+                if not os.access(subpath, os.R_OK):
+                    continue
                 sub = visit_fs(subpath)
                 hashes.append(good_hash(subpath.name.encode()).digest() + sub.hash)
                 mtime = max(mtime, sub.mtime)
