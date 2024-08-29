@@ -242,6 +242,7 @@ def visit_fs(path: Path) -> FsInfo:
     has_php = False
     try:
         if path.is_dir():
+            mtime = datetime.fromtimestamp(0)
             hashes: list[bytes] = []
             for subpath in path.iterdir():
                 if not os.access(subpath, os.R_OK):
