@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-# Script para crear, destruir y manejar usuarios.
+# Script para crear, destruir y en general manejar usuarios.
 # Correr el comando con el argumento `--help` para ver la descripcion y posibles comandos.
 
+import pkg_resources
 import argparse
 import contextlib
 import csv
@@ -18,6 +19,13 @@ import traceback
 from hashlib import blake2b as good_hash
 from types import NoneType
 from typing import Optional, Union, get_args, get_origin
+
+def autoinstall_deps(required_deps: set[str]):
+    installed = {pkg.key for pkg in pkg_resources.working_set}
+    missing = required_deps - installed
+    if missing:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip'])
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])
 
 
 def parse_args() -> argparse.Namespace:
