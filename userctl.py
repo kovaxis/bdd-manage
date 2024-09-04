@@ -3,7 +3,7 @@
 # Script para crear, destruir y en general manejar usuarios.
 # Correr el comando con el argumento `--help` para ver la descripcion y posibles comandos.
 
-import argparse
+import importlib
 import pkg_resources
 import contextlib
 import csv
@@ -17,23 +17,33 @@ import os
 import traceback
 from hashlib import blake2b as good_hash
 from types import NoneType
-from typing import Any, Optional, Union, get_args, get_origin
+from typing import Optional, Union, get_args, get_origin
 
 
 def autoinstall_deps(required_deps: dict[str, str]):
     installed = {pkg.key for pkg in pkg_resources.working_set}
     missing = sorted(set(required_deps) - installed)
     if missing:
+        # subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "pip"]
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                *[required_deps[depname] for depname in missing],
+            ]
         )
-        subprocess.check_call([sys.executable, "-m", "pip", "install", *[required_deps[depname] for depname in missing]])
+        for modname in missing:
+            importlib.reload(importlib.import_module(modname.replace("-", "_")))
 
 
-autoinstall_deps({
-    "pydantic": "pydantic>=2.0.0,<3.0.0",
-    "pydantic-argparse": "git+https://github.com/cody-mar10/pydantic-argparse.git@4a79a48aa393a8b8947229d40f297fbad5802ac1",
-})
+autoinstall_deps(
+    {
+        "pydantic": "pydantic>=2.0.0,<3.0.0",
+        "pydantic-argparse": "git+https://github.com/cody-mar10/pydantic-argparse.git@4a79a48aa393a8b8947229d40f297fbad5802ac1",
+    }
+)
 
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 import pydantic_argparse  # noqa: E402
@@ -209,7 +219,7 @@ def read_user_list(list_path: Path) -> dict[str, User]:
                     ensure(user.id not in users, f"duplicate user {user.id}")
                     users[user.id] = user
         validate_users(users)
-        print(f"read {len(users)} valid users")
+        print(f"read {len(users)} users from {list_path}")
         return users
     except FileNotFoundError:
         print(
@@ -268,7 +278,7 @@ def write_userscan(path: Path, userscan: dict[str, UserScan]):
 
 
 class AddArgs(pydantic_argparse.BaseCommand):
-    lista: Path = Field(description="Lista de alumnos a agregar, en formato CSV.")
+    list: Path = Field(description="Lista de alumnos a agregar, en formato CSV.")
     template: Path = Field(
         Path("./user_template"),
         description="Directorio con los contenidos iniciales de la carpeta HOME para un usuario.",
@@ -279,7 +289,7 @@ class AddArgs(pydantic_argparse.BaseCommand):
         Código para añadir usuarios desde una lista de alumnos.
         """
         old_users = read_system_users()
-        new_users = read_user_list(self.lista)
+        new_users = read_user_list(self.list)
         created = 0
         for user in new_users.values():
             try:
@@ -350,7 +360,11 @@ class RemoveArgs(pydantic_argparse.BaseCommand):
             keep = set(keep_list.keys())
         delete_users = set(sys_users.keys()) - keep
         if delete_users and not self.force:
-            print(f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar? (Y/n) ", end="", flush=True)
+            print(
+                f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar? (Y/n) ",
+                end="",
+                flush=True,
+            )
             if input().strip().lower() == "n":
                 print("cancelado")
                 sys.exit(1)
@@ -573,66 +587,62 @@ class RunArgs(pydantic_argparse.BaseCommand):
         print(f"{ok_runs}/{len(users)} comandos ejecutaron correctamente")
 
 
+class ListArgs(pydantic_argparse.BaseCommand):
+    compare_to: Optional[Path] = Field(
+        None,
+        description="Comparar la lista de usuarios en el sistema contra esta lista de usuarios en formato CSV.",
+    )
+
+    def list_users(self, conf: "GlobalArgs"):
+        """
+        Código para mostrar información sobre los usuarios.
+        """
+
+        def show(msg: str, a: set[str]):
+            print(f"{len(a)} {msg}: {' '.join(sorted(a))}")
+
+        system = set(read_system_users().keys())
+        show("usuarios en el sistema", system)
+        if self.compare_to:
+            print()
+            cmp = set(read_user_list(self.compare_to).keys())
+            show(f"usuarios leídos de {self.compare_to}", cmp)
+            print()
+            show("usuarios en ambas listas", system & cmp)
+            print()
+            show("usuarios en el sistema pero no en la lista", system - cmp)
+            print()
+            show("usuarios en la lista pero no en el sistema", cmp - system)
+
+
 class GlobalArgs(BaseModel):
     create: Optional[AddArgs] = Field(
-        description="Crear usuarios a partir de una lista de usuarios en formato CSV."
+        None,
+        description="Crear usuarios a partir de una lista de usuarios en formato CSV.",
     )
     destroy: Optional[RemoveArgs] = Field(
-        description="Eliminar usuarios, opcionalmente manteniendo una lista de usuarios."
+        None,
+        description="Eliminar usuarios, opcionalmente manteniendo una lista de usuarios.",
     )
     scan: Optional[ScanArgs] = Field(
-        description="Escanear las carpetas HOME de los usuarios para determinar las últimas fechas de modificación."
+        None,
+        description="Escanear las carpetas HOME de los usuarios para determinar las últimas fechas de modificación.",
     )
-    run: Optional[RunArgs] = Field(description="Correr un comando por cada usuario.")
+    run: Optional[RunArgs] = Field(
+        None,
+        description="Correr un comando por cada usuario.",
+    )
+    list: Optional[ListArgs] = Field(
+        None,
+        description="Listar los usuarios en el sistema, opcionalmente comparando contra una lista de alumnos.",
+    )
 
 
 def parse_args() -> GlobalArgs:
-    parser = pydantic_argparse.ArgumentParser(GlobalArgs, description="Crear, destruir y manejar usuarios.")
+    parser = pydantic_argparse.ArgumentParser(
+        GlobalArgs, description="Crear, destruir y manejar usuarios."
+    )
     return parser.parse_typed_args()
-
-    def is_types(ty: type[Any], allow: tuple[type[Any]]) -> bool:
-        if ty in allow:
-            return True
-        if get_origin(ty) == Union:
-            for subty in get_args(ty):
-                if subty not in allow:
-                    return False
-            return True
-        return False
-
-    def populate_parser(parser: argparse.ArgumentParser, ty: BaseModel):
-        nonlocal subcommand_i
-        subparsers = None
-        for fieldname, field in ty.model_fields.items():
-            ty = field.annotation
-            if is_types(ty, (str, NoneType)):
-                # Add basic string arg
-                parser.add_argument()
-            elif is_types(ty, (int, NoneType)):
-                pass
-            elif is_types(ty, (float, NoneType)):
-                pass
-            elif is_types(ty, (bool, NoneType)):
-                pass
-            else:
-                # Subcommand
-                ty_args = get_args(ty)
-                ensure(get_origin(ty) == Union)
-                ensure(len(ty_args) == 2)
-                ensure(NoneType in ty_args)
-                subty = next(subty for subty in ty_args if subty is not NoneType)
-                if subparsers is None:
-                    subcommand_i += 1
-                    subparsers = parser.add_subparsers(dest=f"_subcommand_{subcommand_i}")
-                subparser = subparsers.add_parser(name=fieldname, description=field.description)
-                populate_parser(subparser, subty)
-
-
-    parser = argparse.ArgumentParser(description="Crear, destruir y manejar usuarios.")
-    subcommand_i = 0
-    populate_parser(parser, GlobalArgs)
-    args = parser.parse_args()
-    raise NotImplemented
 
 
 if __name__ == "__main__":
@@ -651,7 +661,7 @@ if __name__ == "__main__":
         conf.scan.scan_users(conf)
     elif conf.run:
         conf.run.run_command_per_user(conf)
+    elif conf.list:
+        conf.list.list_users(conf)
     else:
         raise RuntimeError("no command to run?")
-
-    print("done")

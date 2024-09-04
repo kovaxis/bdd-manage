@@ -34,7 +34,7 @@ apt install -y php libapache2-mod-php php-pgsql
 systemctl reload apache2 || /etc/init.d/apache2 reload
 
 # Agregar scripts al PATH
-echo "PATH=\$PATH:$PWD/bin" >> /etc/profile.d/bdd-manage.sh
+echo "export PATH=\$PATH:$PWD/bin" >> /etc/profile.d/bdd-manage.sh
 
 printf "\033[0;32mServidor configurado!\033[0m\n"
-printf "Recuerda crear los usuarios a partir de una lista de alumnos con el comando \033[0;1muserctl\033[0m\n"
+printf "Recuerda crear los usuarios a partir de una lista de alumnos con el comando \033[0;1muserctl\033[0m (puede requerir relogin)\n"
