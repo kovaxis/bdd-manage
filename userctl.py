@@ -320,6 +320,23 @@ class AddArgs(pydantic_argparse.BaseCommand):
                     ["sudo", "chown", "-R", f"{name}:www-data", f"/home/{name}"],
                     check=True,
                 )
+                CREATE_USER_CMD = """
+                    CREATE ROLE "{user}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION;
+                    CREATE DATABASE "{user}" OWNER "{user}";
+                    REVOKE ALL PRIVILEGES ON DATABASE "{user}" FROM PUBLIC;
+                """
+                for line in CREATE_USER_CMD.splitlines():
+                    if line:
+                        subprocess.run(
+                            [
+                                "sudo",
+                                "-u",
+                                "postgres",
+                                "psql",
+                                "-c",
+                                line.replace("{user}", name),
+                            ]
+                        )
                 if self.template.exists():
                     ensure(
                         self.template.is_dir(),
