@@ -45,28 +45,22 @@ autoinstall_deps(
     }
 )
 
-from pydantic import BaseModel, Field, ValidationError  # noqa: E402
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError  # noqa: E402
 import pydantic_argparse  # noqa: E402
 
 
 SCRIPT_DIR: Path = Path(__file__).resolve().parent
 
 
-class User(BaseModel):
-    """
-    Datos de un usuario.
-    """
-
-    id: str
-    n_alumno: str
-    run: str = ""
-    section: str = ""
-
-
 class FsInfo(BaseModel):
     name: bytes
     mtime: datetime
     contents: list["FsInfo"] | bytes
+
+
+class UserFields(BaseModel):
+    id: str
+    fields: dict[str, str]
 
 
 class UserScan(BaseModel):
@@ -119,44 +113,60 @@ def ensure(cond: bool, *ctx):
         raise AssertionError(msg)
 
 
-USERSTR_SIGNATURE = "bdd-manage-userstring%"
+def confirm(msg: str, default: bool = True) -> bool:
+    print(
+        f"{msg} (Y/n) ",
+        end="",
+        flush=True,
+    )
+    if input().strip().lower() == "n":
+        print("cancelado")
+        sys.exit(1)
 
 
-def serialize_user(user: User) -> str:
-    userstr = user.model_dump_json()
-    userstr = userstr.replace("%", "%%")
-    userstr = userstr.replace(":", "%.")
-    userstr = USERSTR_SIGNATURE + userstr
-    return userstr
+USERSTR_SIGNATURE = "bdd-manage-user"
 
 
-def deserialize_user(userstr: str) -> User | None:
-    if not userstr.startswith(USERSTR_SIGNATURE):
-        return None
-    userstr = userstr.removeprefix(USERSTR_SIGNATURE)
-    userstr = userstr.replace("%.", ":")
-    userstr = userstr.replace("%%", "%")
-    return User.model_validate_json(userstr)
+def opener_private(path: str, flags: int) -> int:
+    return os.open(path, flags, 0o600)
 
 
-def read_system_users() -> dict[str, User]:
+def read_userdb() -> dict[str, UserFields]:
+    path = SCRIPT_DIR.joinpath(".userdb")
+    if path.exists():
+        try:
+            with exception_context(f'reading userdb from "{path}"'):
+                return TypeAdapter(dict[str, UserFields]).validate_json(
+                    path.read_bytes()
+                )
+        except Exception:
+            traceback.print_exc()
+    return {}
+
+
+def write_userdb(userdb: dict[str, UserFields]):
+    path = SCRIPT_DIR.joinpath(".userdb")
+    with open(path, "wb", opener=opener_private) as file:
+        file.write(TypeAdapter(dict[str, UserFields]).dump_json(userdb))
+
+
+def read_system_users() -> dict[str, UserFields]:
     """
     Leer la lista de usuarios presentes en el sistema.
     """
-    users = {}
+    userdb = read_userdb()
+    users: dict[str, UserFields] = {}
     with Path("/etc/passwd").open() as passwd_file:
         for userline in passwd_file:
             userfields = userline.split(":")
             username = userfields[0]
             usercomment = userfields[4]
-            try:
-                with exception_context(f"parsing user {username} in /etc/passwd"):
-                    user = deserialize_user(usercomment)
-                    if user:
-                        ensure(user.id == username, "user id is not equal to username")
-                        users[username] = user
-            except Exception:
-                traceback.print_exc()
+            if usercomment == USERSTR_SIGNATURE:
+                users[username] = UserFields(
+                    id=username, fields=userdb.get(username, {})
+                )
+                if username not in userdb:
+                    print(f"WARNING: user {username} is not in .userdb")
     return users
 
 
@@ -177,25 +187,25 @@ def get_field_fuzzy(record: dict[str, str], regex: str) -> str:
     return value
 
 
-def read_user_list(list_path: Path) -> dict[str, User]:
+def read_user_list(list_path: Path) -> dict[str, UserFields]:
     """
     Leer una lista de usuarios en formato CSV.
     """
 
-    def read_user(record: dict[str, str]) -> User:
-        uid = find_field_fuzzy(record, r"u?id")
-        if uid is None:
-            email = get_field_fuzzy(record, r"e-?mail")
-            ensure("@" in email, "email @")
-            uid = email[: email.find("@")]
-        return User(
-            id=uid,
-            n_alumno=get_field_fuzzy(record, r"n.{0,3}\salumno"),
-            section=find_field_fuzzy(record, r"secci.{0,3}n") or "",
-            run=find_field_fuzzy(record, r"ru[nt]") or "",
+    def read_user(record: dict[str, str]) -> UserFields:
+        if "id" not in record and "email" in record:
+            email = record["email"]
+            ensure("@" in email, "email no tiene @")
+            record["id"] = email[: email.find("@")]
+        ensure(
+            "id" in record,
+            "lista de usuarios no tiene 'id' ni 'email', no se puede continuar",
         )
+        id = record["id"]
+        del record["id"]
+        return UserFields(id=id, fields=record)
 
-    def validate_users(users: dict[str, User]):
+    def validate_users(users: dict[str, UserFields]):
         """
         Asegurarse que los datos de los usuarios sean validos.
         """
@@ -205,11 +215,9 @@ def read_user_list(list_path: Path) -> dict[str, User]:
                 ensure(re.fullmatch(r"[a-zA-Z0-9._-]{1,24}", user.id), "user id")
                 ensure(re.fullmatch(r"[a-zA-Z]", user.id[0]), "user id start")
                 ensure(re.fullmatch(r"[a-zA-Z0-9]", user.id[-1]), "user id end")
-                ensure(re.fullmatch(r"[0-9A-Za-z]{1,30}", user.n_alumno), "n alumno")
-                ensure(re.fullmatch(r"[0-9]{1,12}-[0-9Kk]", user.run), "run")
 
     try:
-        users: dict[str, User] = {}
+        users: dict[str, UserFields] = {}
         with open(list_path, encoding="utf-8", newline="") as file:
             line = 0
             for row in csv.DictReader(file):
@@ -223,7 +231,7 @@ def read_user_list(list_path: Path) -> dict[str, User]:
         return users
     except FileNotFoundError:
         print(
-            f"no se encontro la lista de alumnos en '{conf.lista_alumnos}'",
+            f"no se encontro la lista de alumnos en '{list_path}'",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -261,7 +269,9 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
 
 def write_userscan(path: Path, userscan: dict[str, UserScan]):
     with exception_context(f"escribiendo csv de usercan en {path}"):
-        with open(path, "w", encoding="utf-8", newline="") as file:
+        with open(
+            path, "w", encoding="utf-8", newline="", opener=opener_private
+        ) as file:
             fields = dataclasses.fields(UserScan)
             writer = csv.DictWriter(file, fieldnames=[field.name for field in fields])
             writer.writeheader()
@@ -277,7 +287,7 @@ def write_userscan(path: Path, userscan: dict[str, UserScan]):
                 writer.writerow(row)
 
 
-class AddArgs(pydantic_argparse.BaseCommand):
+class CreateCmd(pydantic_argparse.BaseCommand):
     list: Path = Field(description="Lista de alumnos a agregar, en formato CSV.")
     template: Path = Field(
         Path("./user_template"),
@@ -291,6 +301,25 @@ class AddArgs(pydantic_argparse.BaseCommand):
         old_users = read_system_users()
         new_users = read_user_list(self.list)
         created = 0
+
+        # Check that users have passwords
+        password_field = "password"
+        no_password = 0
+        for user in new_users.values():
+            no_password += int(not user.fields.get(password_field))
+        if no_password > 0:
+            print(
+                f"{no_password}/{len(new_users)} usuarios a crear no tienen campo '{password_field}'"
+            )
+            print(f"confirmas que quieres crear usuarios sin contraseña? ")
+
+        # Write .userdb
+        userdb = read_userdb()
+        for user in new_users.values():
+            userdb[user.id] = user
+        write_userdb(userdb)
+
+        # Create users
         for user in new_users.values():
             try:
                 name = user.id
@@ -304,7 +333,7 @@ class AddArgs(pydantic_argparse.BaseCommand):
                         "/bin/bash",
                         "-m",
                         "-c",
-                        serialize_user(user),
+                        USERSTR_SIGNATURE,
                     ],
                     check=True,
                 )
@@ -360,7 +389,7 @@ class AddArgs(pydantic_argparse.BaseCommand):
         )
 
 
-class RemoveArgs(pydantic_argparse.BaseCommand):
+class DestroyCmd(pydantic_argparse.BaseCommand):
     keep: Optional[Path] = Field(
         None, description="No eliminar los usuarios que estén presentes en esta lista."
     )
@@ -377,14 +406,9 @@ class RemoveArgs(pydantic_argparse.BaseCommand):
             keep = set(keep_list.keys())
         delete_users = set(sys_users.keys()) - keep
         if delete_users and not self.force:
-            print(
-                f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar? (Y/n) ",
-                end="",
-                flush=True,
+            confirm(
+                f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar?"
             )
-            if input().strip().lower() == "n":
-                print("cancelado")
-                sys.exit(1)
         for username in delete_users:
             user = sys_users[username]
             try:
@@ -399,7 +423,7 @@ class RemoveArgs(pydantic_argparse.BaseCommand):
         )
 
 
-class ScanArgs(pydantic_argparse.BaseCommand):
+class ScanCmd(pydantic_argparse.BaseCommand):
     out: Optional[Path] = Field(
         None,
         description="Generar un reporte y almacenarlo en esta ruta en formato CSV.",
@@ -576,7 +600,7 @@ class ScanArgs(pydantic_argparse.BaseCommand):
             return False
 
 
-class RunArgs(pydantic_argparse.BaseCommand):
+class RunCmd(pydantic_argparse.BaseCommand):
     command: str = Field(
         description="Comando a correr. Keywords como {id}, {run} o {n_alumno} se reemplazarán por los valores apropiados."
     )
@@ -604,7 +628,7 @@ class RunArgs(pydantic_argparse.BaseCommand):
         print(f"{ok_runs}/{len(users)} comandos ejecutaron correctamente")
 
 
-class ListArgs(pydantic_argparse.BaseCommand):
+class ListCmd(pydantic_argparse.BaseCommand):
     compare_to: Optional[Path] = Field(
         None,
         description="Comparar la lista de usuarios en el sistema contra esta lista de usuarios en formato CSV.",
@@ -633,23 +657,23 @@ class ListArgs(pydantic_argparse.BaseCommand):
 
 
 class GlobalArgs(BaseModel):
-    create: Optional[AddArgs] = Field(
+    create: Optional[CreateCmd] = Field(
         None,
         description="Crear usuarios a partir de una lista de usuarios en formato CSV.",
     )
-    destroy: Optional[RemoveArgs] = Field(
+    destroy: Optional[DestroyCmd] = Field(
         None,
         description="Eliminar usuarios, opcionalmente manteniendo una lista de usuarios.",
     )
-    scan: Optional[ScanArgs] = Field(
+    scan: Optional[ScanCmd] = Field(
         None,
         description="Escanear las carpetas HOME de los usuarios para determinar las últimas fechas de modificación.",
     )
-    run: Optional[RunArgs] = Field(
+    run: Optional[RunCmd] = Field(
         None,
         description="Correr un comando por cada usuario.",
     )
-    list: Optional[ListArgs] = Field(
+    list: Optional[ListCmd] = Field(
         None,
         description="Listar los usuarios en el sistema, opcionalmente comparando contra una lista de alumnos.",
     )
