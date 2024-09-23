@@ -3,5 +3,5 @@
 USER=admin
 PASS=password
 
-echo "Connecting to test container at localhost:10022"
-sshpass -p "$PASS" ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -p 10022 $USER@localhost
+echo "Connecting to test container at localhost:20022"
+sshpass -p "$PASS" ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -p 20022 $USER@localhost
