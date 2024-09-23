@@ -2,7 +2,7 @@
 
 set -e
 cd "$(dirname "$0")"
-if [ $# -ne 1 ]; then
+if [ $# -ne 1 ] || ! id $1 >/dev/null; then
     printf "\033[0;31mUsage: setup.sh <nombre de usuario admin>\033[0m\n"
     exit 1
 fi
