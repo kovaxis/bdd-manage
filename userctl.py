@@ -4,7 +4,7 @@
 # Correr el comando con el argumento `--help` para ver la descripcion y posibles comandos.
 
 import importlib
-import pkg_resources
+import importlib.util
 import contextlib
 import csv
 import dataclasses
@@ -17,12 +17,11 @@ import os
 import traceback
 from hashlib import blake2b as good_hash
 from types import NoneType
-from typing import Optional, Union, get_args, get_origin
+from typing import Any, Optional, Union, get_args, get_origin
 
 
 def autoinstall_deps(required_deps: dict[str, str]):
-    installed = {pkg.key for pkg in pkg_resources.working_set}
-    missing = sorted(set(required_deps) - installed)
+    missing = {name for name in required_deps.keys() if not importlib.util.find_spec(name.replace("-", "_"))}
     if missing:
         # subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call(
@@ -49,13 +48,13 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError  # noqa: E40
 import pydantic_argparse  # noqa: E402
 
 
-SCRIPT_DIR: Path = Path(__file__).resolve().parent
+CFG_DIR: Path = Path(__file__).resolve().parent
 
 
 class FsInfo(BaseModel):
-    name: bytes
+    name: str
     mtime: datetime
-    contents: list["FsInfo"] | bytes
+    contents: list["FsInfo"] | str
 
 
 class UserFields(BaseModel):
@@ -103,7 +102,7 @@ def exception_context(msg: str):
         raise
 
 
-def ensure(cond: bool, *ctx):
+def ensure(cond: Any, *ctx):
     """
     Si `cond` es falso, imprime un error y termina.
     """
@@ -113,13 +112,18 @@ def ensure(cond: bool, *ctx):
         raise AssertionError(msg)
 
 
-def confirm(msg: str, default: bool = True) -> bool:
+def confirm(msg: str, default_confirm: bool = True) -> None:
     print(
-        f"{msg} (Y/n) ",
+        f"{msg} ({'Y' if default_confirm else 'y'}/{'n' if default_confirm else 'N'}) ",
         end="",
         flush=True,
     )
-    if input().strip().lower() == "n":
+    userinput = input().strip().lower()
+    if default_confirm:
+        do_cancel = (userinput == "n")
+    else:
+        do_cancel = (userinput != 'y')
+    if do_cancel:
         print("cancelado")
         sys.exit(1)
 
@@ -132,7 +136,7 @@ def opener_private(path: str, flags: int) -> int:
 
 
 def read_userdb() -> dict[str, UserFields]:
-    path = SCRIPT_DIR.joinpath(".userdb")
+    path = CFG_DIR.joinpath(".userdb")
     if path.exists():
         try:
             with exception_context(f'reading userdb from "{path}"'):
@@ -145,7 +149,7 @@ def read_userdb() -> dict[str, UserFields]:
 
 
 def write_userdb(userdb: dict[str, UserFields]):
-    path = SCRIPT_DIR.joinpath(".userdb")
+    path = CFG_DIR.joinpath(".userdb")
     with open(path, "wb", opener=opener_private) as file:
         file.write(TypeAdapter(dict[str, UserFields]).dump_json(userdb))
 
@@ -162,10 +166,10 @@ def read_system_users() -> dict[str, UserFields]:
             username = userfields[0]
             usercomment = userfields[4]
             if usercomment == USERSTR_SIGNATURE:
-                users[username] = UserFields(
-                    id=username, fields=userdb.get(username, {})
-                )
-                if username not in userdb:
+                if username in userdb and userdb[username].id == username:
+                    users[username] = userdb[username]
+                else:
+                    users[username] = UserFields(id=username, fields={})
                     print(f"WARNING: user {username} is not in .userdb")
     return users
 
@@ -258,6 +262,7 @@ def read_userscan(path: Path) -> dict[str, UserScan]:
                     ):
                         raise RuntimeError(f"value for field {field.name} not found")
                     if field.type is datetime:
+                        assert isinstance(x, str)
                         x = datetime.fromisoformat(x)
                     if field.type is bool:
                         x = bool(x)
@@ -311,7 +316,10 @@ class CreateCmd(pydantic_argparse.BaseCommand):
             print(
                 f"{no_password}/{len(new_users)} usuarios a crear no tienen campo '{password_field}'"
             )
-            print(f"confirmas que quieres crear usuarios sin contraseña? ")
+            confirm(
+                "confirmas que quieres crear usuarios sin contraseña?",
+                default_confirm=True,
+            )
 
         # Write .userdb
         userdb = read_userdb()
@@ -323,7 +331,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
         for user in new_users.values():
             try:
                 name = user.id
-                pwd = user.n_alumno
+                pwd = user.fields[password_field]
                 subprocess.run(
                     [
                         "sudo",
@@ -349,12 +357,12 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     ["sudo", "chown", "-R", f"{name}:www-data", f"/home/{name}"],
                     check=True,
                 )
-                CREATE_USER_CMD = """
+                CREATE_USER_SQL = """
                     CREATE ROLE "{user}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION;
                     CREATE DATABASE "{user}" OWNER "{user}";
                     REVOKE ALL PRIVILEGES ON DATABASE "{user}" FROM PUBLIC;
                 """
-                for line in CREATE_USER_CMD.splitlines():
+                for line in CREATE_USER_SQL.splitlines():
                     if line:
                         subprocess.run(
                             [
@@ -364,7 +372,8 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                                 "psql",
                                 "-c",
                                 line.replace("{user}", name),
-                            ]
+                            ],
+                            cwd="/",
                         )
                 if self.template.exists():
                     ensure(
@@ -407,12 +416,30 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
         delete_users = set(sys_users.keys()) - keep
         if delete_users and not self.force:
             confirm(
-                f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar?"
+                f"se eliminarán {len(delete_users)}/{len(sys_users)} usuarios de alumnos. confirmar?",
+                default_confirm=False,
             )
         for username in delete_users:
             user = sys_users[username]
             try:
                 subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
+                DESTROY_USER_SQL = """
+                    DROP DATABASE "{user}";
+                    DROP ROLE "{user}";
+                """
+                for line in DESTROY_USER_SQL.splitlines():
+                    if line:
+                        subprocess.run(
+                            [
+                                "sudo",
+                                "-u",
+                                "postgres",
+                                "psql",
+                                "-c",
+                                line.replace("{user}", user.id),
+                            ],
+                            cwd="/",
+                        )
                 print(f"deleted user {user.id}")
             except subprocess.CalledProcessError:
                 traceback.print_exc()
@@ -444,9 +471,9 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         scan = self.do_scan(scantime, users)
 
         # Agregar escaneo al archivo .scandb
-        db_path = SCRIPT_DIR.joinpath(".scandb")
+        db_path = CFG_DIR.joinpath(".scandb")
         with exception_context(f"writing scan to {db_path}"):
-            with db_path.open("a", encoding="utf-8") as db_file:
+            with open(db_path, "a", encoding="utf-8", opener=opener_private) as db_file:
                 db_file.write(scan.model_dump_json() + "\n")
 
         # Generar un reporte
@@ -454,7 +481,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
             all_scans = self.read_scandb(db_path)
             self.generate_report(all_scans, self.out)
 
-    def do_scan(self, scantime: datetime, users: dict[str, User]) -> Scan:
+    def do_scan(self, scantime: datetime, users: dict[str, UserFields]) -> Scan:
         scan = Scan(scantime=scantime, users={})
         try:
             if self.lock:
@@ -483,16 +510,17 @@ class ScanCmd(pydantic_argparse.BaseCommand):
 
     def visit_fs(self, path: Path) -> FsInfo:
         mtime = datetime.fromtimestamp(path.lstat().st_mtime)
-        name = path.name.encode()
+        name = path.name
+        contents: str | list[FsInfo]
         if path.is_dir():
-            contents: list[FsInfo] = []
+            contents = []
             for subpath in path.iterdir():
                 if not os.access(subpath, os.R_OK):
                     continue
                 contents.append(self.visit_fs(subpath))
             contents.sort(key=lambda sub: sub.name)
         else:
-            contents = good_hash(path.read_bytes()).digest()
+            contents = good_hash(path.read_bytes()).digest().hex()
         return FsInfo(name=name, mtime=mtime, contents=contents)
 
     def read_scandb(self, db_path: Path) -> list[Scan]:
@@ -556,12 +584,12 @@ class ScanCmd(pydantic_argparse.BaseCommand):
 
     def hash_fsinfo(self, info: FsInfo) -> bytes:
         hx = good_hash()
-        hx.update(good_hash(info.name).digest())
-        if isinstance(info.contents, bytes):
-            hx.update("f")
-            hx.update(info.contents)
+        hx.update(good_hash(info.name.encode()).digest())
+        if isinstance(info.contents, str):
+            hx.update(b"f")
+            hx.update(info.contents.encode())
         else:
-            hx.update("d")
+            hx.update(b"d")
             hashes: list[bytes] = []
             for sub in info.contents:
                 hashes.append(self.hash_fsinfo(sub))
@@ -576,13 +604,13 @@ class ScanCmd(pydantic_argparse.BaseCommand):
     def get_fsinfo_mtime(
         self, fsinfo: FsInfo, path: str
     ) -> tuple[datetime, str] | None:
-        if isinstance(fsinfo.contents, bytes):
-            return (fsinfo.mtime, path + fsinfo.name.decode(errors="replace"))
+        if isinstance(fsinfo.contents, str):
+            return (fsinfo.mtime, path + fsinfo.name)
         else:
-            max_mtime: datetime | None = None
+            max_mtime: tuple[datetime, str] | None = None
             for sub in fsinfo.contents:
                 sub_mtime = self.get_fsinfo_mtime(
-                    sub, path + fsinfo.name.decode(errors="replace") + "/"
+                    sub, path + fsinfo.name + "/"
                 )
                 if sub_mtime is not None and (
                     max_mtime is None or sub_mtime > max_mtime
@@ -591,8 +619,8 @@ class ScanCmd(pydantic_argparse.BaseCommand):
             return max_mtime
 
     def has_php(self, fsinfo: FsInfo) -> bool:
-        if isinstance(fsinfo.contents, bytes):
-            return fsinfo.name.decode(errors="replace").endswith(".php")
+        if isinstance(fsinfo.contents, str):
+            return fsinfo.name.endswith(".php")
         else:
             for sub in fsinfo.contents:
                 if self.has_php(sub):
@@ -610,13 +638,33 @@ class RunCmd(pydantic_argparse.BaseCommand):
         Código para correr un comando arbitrario por usuario
         """
         users = read_system_users()
-        print(f"corriendo comando para {len(users)} usuarios")
+        
+        REPLACE_PATTERN = r"(^|[^{]){([^{}]+)}"
+        keys = set()
+        for mat in re.finditer(REPLACE_PATTERN, self.command):
+            keys.add(mat[2])
+        keys_without_id = keys.copy()
+        keys_without_id.discard("id")
+        valid_users: set[str] = {user.id for user in users.values() if keys_without_id.issubset(user.fields.keys())}
+        invalid_users = set(users.keys()) - valid_users
+        if keys:
+            print(f'el comando "{self.command}" utiliza los atributos {", ".join(keys)}')
+        if invalid_users:
+            if not valid_users:
+                print("ningún usuario tiene todos los atributos necesarios definidos. revisa que estén bien escritos.")
+                sys.exit(1)
+            print(f"{len(invalid_users)}/{len(users)} usuarios tienen estos atributos indefinidos")
+            print(f"se ignorarán estos usuarios: {', '.join(sorted(invalid_users))}")
+            confirm(f"confirmas que quieres correr el comando solo para {len(valid_users)}/{len(users)} usuarios?")
+
+        print(f"corriendo comando para {len(valid_users)} usuarios")
         ok_runs = 0
-        for user in users.values():
+        for username in sorted(valid_users):
+            user = users[username]
             cmd = self.command
-            cmd = cmd.replace("{id}", user.id)
-            cmd = cmd.replace("{n_alumno}", user.n_alumno)
-            cmd = cmd.replace("{run}", user.run)
+            cmd = re.sub(REPLACE_PATTERN, lambda mat: mat[1] + (user.id if mat[2] == "id" else user.fields[mat[2]]), cmd)
+            cmd = cmd.replace("{{", "{")
+            cmd = cmd.replace("}}", "}")
             print(f'corriendo comando "{cmd}"')
             result = os.system(cmd)
             if result == 0:
@@ -625,7 +673,7 @@ class RunCmd(pydantic_argparse.BaseCommand):
                 print(
                     f"el comando falló para el usuario {user.id} (exit code {result})"
                 )
-        print(f"{ok_runs}/{len(users)} comandos ejecutaron correctamente")
+        print(f"{ok_runs}/{len(valid_users)} comandos ejecutaron correctamente")
 
 
 class ListCmd(pydantic_argparse.BaseCommand):
@@ -687,6 +735,9 @@ def parse_args() -> GlobalArgs:
 
 
 if __name__ == "__main__":
+    if os.geteuid() == 0:
+        print("userctl should not run as root")
+        sys.exit(1)
     conf = parse_args()
     parser = pydantic_argparse.ArgumentParser(
         model=GlobalArgs,

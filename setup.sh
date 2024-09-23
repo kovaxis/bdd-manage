@@ -2,6 +2,15 @@
 
 set -e
 cd "$(dirname "$0")"
+if [ $# -ne 1 ]; then
+    printf "\033[0;31mUsage: setup.sh <nombre de usuario admin>\033[0m\n"
+    exit 1
+fi
+if [ $EUID -ne 0 ]; then
+    printf "\033[0;31mPlease run as root (run with sudo)\033[0m\n"
+    exit 1
+fi
+USER=$1
 
 # Instalar esenciales
 echo "Instalando esenciales..."
@@ -15,6 +24,9 @@ apt install -y apache2
 read -p "Ingrese hostname del servidor (eg. pavlov.ing.puc.cl): " HOSTNAME
 sed "s/{HOSTNAME}/$HOSTNAME/g" apache.conf > /etc/apache2/sites-available/000-default.conf
 systemctl start apache2 || /etc/init.d/apache2 start
+
+# Añadir usuario actual a www-data para poder ver las carpetas home de todos los usuarios
+usermod -aG www-data $USER
 
 # Configurar SSL con Let's Encrypt
 echo "Configurando certificado SSL..."

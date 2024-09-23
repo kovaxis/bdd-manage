@@ -1,4 +1,8 @@
 __pycache__
+/.venv
 /user_template
 /.scandb
 /.userdb
+lista*.csv
+reporte*.csv
+!lista-ejemplo.csv
