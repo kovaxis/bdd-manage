@@ -8,6 +8,8 @@ Instalar todo el software necesario para dejar funcionando el servidor.
 Requiere permisos de _root_, y toma como argumento el nombre de usuario del usuario que actuará como administrador.
 Instala la herramienta `userctl`, para poder agregar y manejar usuarios.
 
+El script es idempotente, esto significa que correrlo múltiples veces no genera nuevos cambios.
+
 **NOTA**: Este script no inicializa los usuarios, para eso es necesario ejecutar `userctl create`, como indica la sección a continuación.
 
 ## `userctl`
@@ -19,7 +21,7 @@ Se pueden ver todos los comandos y argumentos usando `userctl --help`.
 ### Comandos notables
 
 - `userctl create --list <lista.csv>`: Agrega usuarios a partir de la lista entregada. La lista ha de tener una columna `id` y una columna `password`.
+- `userctl scan --out reporte.csv`: Obtener un reporte sobre la última modificación que ha hecho cada usuario.
 - `userctl run --command 'printf "{password}\n{password}\n" | sudo passwd {id}'`: Restablecer todas las contraseñas a sus valores originales.
 - `userctl run --command '[ {id} = usuario ] && printf "{password}\n{password}\n" | sudo passwd {id} && sudo passwd -e {id}'`: Restablecer una contraseña particular a su valor original.
 - `userctl run --command 'sudo passwd -e {id} && sudo -u postgres psql -c "ALTER ROLE {id} WITH PASSWORD null;"'`: Forzar a los usuarios a elegir sus contraseñas.
-- `userctl scan --out reporte.csv`: Obtener un reporte sobre la última modificación que ha hecho cada usuario.
