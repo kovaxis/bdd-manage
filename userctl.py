@@ -7,7 +7,6 @@ import importlib
 import importlib.util
 import contextlib
 import csv
-import dataclasses
 from datetime import datetime
 from pathlib import Path
 import re
@@ -16,8 +15,7 @@ import subprocess
 import os
 import traceback
 from hashlib import blake2b as good_hash
-from types import NoneType
-from typing import Any, Optional, Union, get_args, get_origin
+from typing import Any, Optional
 
 
 def autoinstall_deps(required_deps: dict[str, str]):
@@ -52,12 +50,19 @@ CFG_DIR: Path = Path(__file__).resolve().parent
 
 
 class FsInfo(BaseModel):
+    """
+    Información compacta sobre un archivo/directorio.
+    Almacena la estructura de los archivos y un hash de cada archivo, pero no los contenidos enteros.
+    """
     name: str
     mtime: datetime
     contents: list["FsInfo"] | str
 
 
-class UserFields(BaseModel):
+class User(BaseModel):
+    """
+    Datos sobre un usuario.
+    """
     id: str
     fields: dict[str, str]
 
@@ -103,10 +108,6 @@ def exception_context(msg: str):
 
 
 def ensure(cond: Any, *ctx):
-    """
-    Si `cond` es falso, imprime un error y termina.
-    """
-
     if not cond:
         msg = ": ".join(("assertion failed",) + ctx)
         raise AssertionError(msg)
@@ -135,12 +136,15 @@ def opener_private(path: str, flags: int) -> int:
     return os.open(path, flags, 0o600)
 
 
-def read_userdb() -> dict[str, UserFields]:
+def read_userdb() -> dict[str, User]:
+    """
+    Leer la base de datos `.userdb`, que contiene los atributos de los usuarios (como la contraseña original).
+    """
     path = CFG_DIR.joinpath(".userdb")
     if path.exists():
         try:
             with exception_context(f'reading userdb from "{path}"'):
-                return TypeAdapter(dict[str, UserFields]).validate_json(
+                return TypeAdapter(dict[str, User]).validate_json(
                     path.read_bytes()
                 )
         except Exception:
@@ -148,18 +152,19 @@ def read_userdb() -> dict[str, UserFields]:
     return {}
 
 
-def write_userdb(userdb: dict[str, UserFields]):
+def write_userdb(userdb: dict[str, User]):
     path = CFG_DIR.joinpath(".userdb")
     with open(path, "wb", opener=opener_private) as file:
-        file.write(TypeAdapter(dict[str, UserFields]).dump_json(userdb))
+        file.write(TypeAdapter(dict[str, User]).dump_json(userdb))
 
 
-def read_system_users() -> dict[str, UserFields]:
+def read_system_users() -> dict[str, User]:
     """
     Leer la lista de usuarios presentes en el sistema.
+    La lista se lee directo de los usuarios de linux, pero los atributos se complementan desde `.userdb`.
     """
     userdb = read_userdb()
-    users: dict[str, UserFields] = {}
+    users: dict[str, User] = {}
     with Path("/etc/passwd").open() as passwd_file:
         for userline in passwd_file:
             userfields = userline.split(":")
@@ -169,34 +174,17 @@ def read_system_users() -> dict[str, UserFields]:
                 if username in userdb and userdb[username].id == username:
                     users[username] = userdb[username]
                 else:
-                    users[username] = UserFields(id=username, fields={})
+                    users[username] = User(id=username, fields={})
                     print(f"WARNING: user {username} is not in .userdb")
     return users
 
 
-def find_field_fuzzy(record: dict[str, str], regex: str) -> str | None:
-    value = None
-    for k, v in record.items():
-        if re.fullmatch(regex, k, re.IGNORECASE):
-            if value is not None:
-                raise RuntimeError(f"duplicate field {k}")
-            value = v
-    return value
-
-
-def get_field_fuzzy(record: dict[str, str], regex: str) -> str:
-    value = find_field_fuzzy(record, regex)
-    if value is None:
-        raise RuntimeError(f"field {regex} not found")
-    return value
-
-
-def read_user_list(list_path: Path) -> dict[str, UserFields]:
+def read_user_list(list_path: Path) -> dict[str, User]:
     """
     Leer una lista de usuarios en formato CSV.
     """
 
-    def read_user(record: dict[str, str]) -> UserFields:
+    def read_user(record: dict[str, str]) -> User:
         if "id" not in record and "email" in record:
             email = record["email"]
             ensure("@" in email, "email no tiene @")
@@ -207,9 +195,9 @@ def read_user_list(list_path: Path) -> dict[str, UserFields]:
         )
         id = record["id"]
         del record["id"]
-        return UserFields(id=id, fields=record)
+        return User(id=id, fields=record)
 
-    def validate_users(users: dict[str, UserFields]):
+    def validate_users(users: dict[str, User]):
         """
         Asegurarse que los datos de los usuarios sean validos.
         """
@@ -221,7 +209,7 @@ def read_user_list(list_path: Path) -> dict[str, UserFields]:
                 ensure(re.fullmatch(r"[a-zA-Z0-9]", user.id[-1]), "user id end")
 
     try:
-        users: dict[str, UserFields] = {}
+        users: dict[str, User] = {}
         with open(list_path, encoding="utf-8", newline="") as file:
             line = 0
             for row in csv.DictReader(file):
@@ -239,57 +227,6 @@ def read_user_list(list_path: Path) -> dict[str, UserFields]:
             file=sys.stderr,
         )
         sys.exit(1)
-
-
-def read_userscan(path: Path) -> dict[str, UserScan]:
-    """
-    Leer un CSV de scans de usuarios.
-    """
-    with exception_context(f"leyendo csv de userscan en {path}"):
-        userscan = {}
-        fields = dataclasses.fields(UserScan)
-        with open(path, encoding="utf-8", newline="") as file:
-            for row in csv.DictReader(file):
-                args = {}
-                for field in fields:
-                    x = row.get(field.name)
-                    if (
-                        not (
-                            get_origin(field.type) == Union
-                            and NoneType in get_args(field.type)
-                        )
-                        and x is None
-                    ):
-                        raise RuntimeError(f"value for field {field.name} not found")
-                    if field.type is datetime:
-                        assert isinstance(x, str)
-                        x = datetime.fromisoformat(x)
-                    if field.type is bool:
-                        x = bool(x)
-                    args[field.name] = x
-                user = UserScan(**args)
-                userscan[user.id] = user
-        return userscan
-
-
-def write_userscan(path: Path, userscan: dict[str, UserScan]):
-    with exception_context(f"escribiendo csv de usercan en {path}"):
-        with open(
-            path, "w", encoding="utf-8", newline="", opener=opener_private
-        ) as file:
-            fields = dataclasses.fields(UserScan)
-            writer = csv.DictWriter(file, fieldnames=[field.name for field in fields])
-            writer.writeheader()
-            for user in userscan.values():
-                row = {}
-                for field in fields:
-                    x = getattr(user, field.name)
-                    if field.type is datetime:
-                        x = datetime.isoformat(x)
-                    if field.type is bool:
-                        x = str(x)
-                    row[field.name] = x
-                writer.writerow(row)
 
 
 class CreateCmd(pydantic_argparse.BaseCommand):
@@ -483,7 +420,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
             all_scans = self.read_scandb(db_path)
             self.generate_report(all_scans, self.out)
 
-    def do_scan(self, scantime: datetime, users: dict[str, UserFields]) -> Scan:
+    def do_scan(self, scantime: datetime, users: dict[str, User]) -> Scan:
         scan = Scan(scantime=scantime, users={})
         try:
             if self.lock:
