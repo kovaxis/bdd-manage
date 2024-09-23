@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Este script instala todo lo necesario para preparar el servidor para su uso
+# Este script es idempotente: es seguro correrlo varias veces
+
+# Sanitización para evitar errores comunes
 set -e
 cd "$(dirname "$0")"
 if [ $# -ne 1 ] || ! id $1 >/dev/null; then
@@ -16,7 +20,7 @@ USER=$1
 echo "Instalando esenciales..."
 apt update -y
 apt upgrade -y
-apt install -y git python3 python3-pip
+apt install -y git python3 python3-pip nano
 
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."
@@ -38,6 +42,7 @@ certbot --apache || printf "\033[0;31mNo se configuró un certificado SSL\033[0m
 # Instalar PostgreSQL
 echo "Instalando Postgres..."
 apt install -y postgresql postgresql-contrib
+systemctl enable postgresql || true
 systemctl start postgresql || /etc/init.d/postgresql start
 sudo -u postgres psql -U postgres -c "ALTER SYSTEM SET max_connections = 1000;"
 systemctl restart postgresql || /etc/init.d/postgresql restart
