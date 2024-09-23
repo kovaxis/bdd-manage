@@ -316,10 +316,8 @@ class CreateCmd(pydantic_argparse.BaseCommand):
             print(
                 f"{no_password}/{len(new_users)} usuarios a crear no tienen campo '{password_field}'"
             )
-            confirm(
-                "confirmas que quieres crear usuarios sin contraseña?",
-                default_confirm=True,
-            )
+            print("abortando")
+            sys.exit(1)
 
         # Write .userdb
         userdb = read_userdb()
@@ -331,7 +329,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
         for user in new_users.values():
             try:
                 name = user.id
-                pwd = user.fields[password_field]
+                password = user.fields[password_field]
                 subprocess.run(
                     [
                         "sudo",
@@ -347,7 +345,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                 )
                 subprocess.run(
                     ["sudo", "passwd", name],
-                    input=f"{pwd}\n{pwd}\n".encode(),
+                    input=f"{password}\n{password}\n".encode(),
                     check=True,
                 )
                 subprocess.run(
@@ -359,6 +357,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                 )
                 CREATE_USER_SQL = """
                     CREATE ROLE "{user}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION;
+                    ALTER ROLE "{user}" WITH CONNECTION LIMIT 10;
                     CREATE DATABASE "{user}" OWNER "{user}";
                     REVOKE ALL PRIVILEGES ON DATABASE "{user}" FROM PUBLIC;
                 """
