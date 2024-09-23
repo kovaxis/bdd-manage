@@ -20,3 +20,5 @@ Se pueden ver todos los comandos y argumentos usando `userctl --help`.
 
 - `userctl create --list <lista.csv>`: Agrega usuarios a partir de la lista entregada. La lista ha de tener una columna `id` y una columna `password`.
 - `userctl run --command 'printf "{password}\n{password}\n" | passwd {id}'`: Reiniciar todas las contraseñas a sus valores originales.
+- `userctl run --command 'sudo passwd -e {id} && sudo -u postgres psql -c "ALTER ROLE {id} WITH PASSWORD null;"'`: Forzar a los usuarios a elegir sus contraseñas.
+- `echo "id,password" > grupos.csv && python3 -c "for i in range(100): print(f'grupo{i+1},cambiame')" >> grupos.csv`: Crear un CSV con 100 grupos secuenciales y claves "cambiame".
