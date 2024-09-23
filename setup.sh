@@ -32,6 +32,7 @@ usermod -aG www-data $USER
 # Configurar SSL con Let's Encrypt
 echo "Configurando certificado SSL..."
 apt install -y certbot python3-certbot-apache
+rm -f /etc/apache2/sites-enabled/000-default-le-ssl.conf /etc/apache2/sites-available/000-default-le-ssl.conf
 certbot --apache || printf "\033[0;31mNo se configuró un certificado SSL\033[0m\n"
 
 # Instalar PostgreSQL
