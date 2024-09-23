@@ -348,6 +348,18 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     input=f"{password}\n{password}\n".encode(),
                     check=True,
                 )
+                if self.template.exists():
+                    ensure(
+                        self.template.is_dir(),
+                        f"template path '{self.template}' is not a directory",
+                    )
+                    ensure(
+                        os.system(
+                            f"sudo cp -r {self.template.joinpath('*')} /home/{name}/"
+                        )
+                        == 0,
+                        "copying home template failed",
+                    )
                 subprocess.run(
                     ["sudo", "chmod", "-R", "2750", f"/home/{name}"], check=True
                 )
@@ -377,18 +389,6 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                             ],
                             cwd="/",
                         )
-                if self.template.exists():
-                    ensure(
-                        self.template.is_dir(),
-                        f"template path '{self.template}' is not a directory",
-                    )
-                    ensure(
-                        os.system(
-                            f"sudo -u {name} cp -r {self.template.joinpath('*')} /home/{name}/"
-                        )
-                        == 0,
-                        "copying home template failed",
-                    )
                 print(f"created user {name}")
                 created += 1
             except subprocess.CalledProcessError:
