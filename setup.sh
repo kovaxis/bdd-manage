@@ -23,6 +23,7 @@ echo "Instalando y configurando Apache..."
 apt install -y apache2
 read -p "Ingrese hostname del servidor (eg. pavlov.ing.puc.cl): " HOSTNAME
 sed "s/{HOSTNAME}/$HOSTNAME/g" apache.conf > /etc/apache2/sites-available/000-default.conf
+systemctl enable apache2 || true
 systemctl start apache2 || /etc/init.d/apache2 start
 
 # Añadir usuario actual a www-data para poder ver las carpetas home de todos los usuarios
@@ -43,7 +44,7 @@ systemctl restart postgresql || /etc/init.d/postgresql restart
 # Instalar PHP
 echo "Instalando PHP..."
 apt install -y php libapache2-mod-php php-pgsql
-systemctl reload apache2 || /etc/init.d/apache2 reload
+systemctl restart apache2 || /etc/init.d/apache2 restart
 
 # Agregar scripts al PATH
 echo "export PATH=\$PATH:$PWD/bin" >> /etc/profile.d/bdd-manage.sh
