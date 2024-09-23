@@ -20,7 +20,7 @@ USER=$1
 echo "Instalando esenciales..."
 apt update -y
 apt upgrade -y
-apt install -y git python3 python3-pip nano
+apt install -y git python3 python3-pip cron nano
 
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."
@@ -54,6 +54,9 @@ systemctl restart apache2 || /etc/init.d/apache2 restart
 
 # Agregar scripts al PATH
 echo "export PATH=\$PATH:$PWD/bin" >> /etc/profile.d/bdd-manage.sh
+
+# Escanear diariamente
+echo "1 0 * * * $USER $PWD/bin/userctl scan" > /etc/cron.d/bdd-manage-scan
 
 printf "\033[0;32mServidor configurado!\033[0m\n"
 printf "Recuerda crear los usuarios a partir de una lista de alumnos con el comando \033[0;1muserctl\033[0m (puede requerir relogin)\n"
