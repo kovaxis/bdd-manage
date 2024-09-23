@@ -22,3 +22,4 @@ Se pueden ver todos los comandos y argumentos usando `userctl --help`.
 - `userctl run --command 'printf "{password}\n{password}\n" | sudo passwd {id}'`: Restablecer todas las contraseñas a sus valores originales.
 - `userctl run --command '[ {id} = usuario ] && printf "{password}\n{password}\n" | sudo passwd {id} && sudo passwd -e {id}'`: Restablecer una contraseña particular a su valor original.
 - `userctl run --command 'sudo passwd -e {id} && sudo -u postgres psql -c "ALTER ROLE {id} WITH PASSWORD null;"'`: Forzar a los usuarios a elegir sus contraseñas.
+- `userctl scan --out reporte.csv`: Obtener un reporte sobre la última modificación que ha hecho cada usuario.
