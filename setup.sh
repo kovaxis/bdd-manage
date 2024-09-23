@@ -53,7 +53,7 @@ apt install -y php libapache2-mod-php php-pgsql
 systemctl restart apache2 || /etc/init.d/apache2 restart
 
 # Agregar scripts al PATH
-echo "export PATH=\$PATH:$PWD/bin" >> /etc/profile.d/bdd-manage.sh
+echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
 
 # Escanear diariamente
 echo "1 0 * * * $USER $PWD/bin/userctl scan" > /etc/cron.d/bdd-manage-scan
