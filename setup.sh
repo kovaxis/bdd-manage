@@ -21,6 +21,7 @@ USER=$1
 # mate procesos en lugar de empezar a usar el disco, que hace que el sistema sea
 # insoportablemente lento y cueste mucho conectarse para arreglarlo (o directamente
 # sea imposible)
+# TODO: swapoff solo desactiva temporalmente, habria que deshabilitarlo permanentemente
 # swapoff -va || printf "\033[0;31mNo se pudo desactivar el swap!\033[0m\n"
 
 # Instalar esenciales
@@ -61,6 +62,13 @@ systemctl restart postgresql || /etc/init.d/postgresql restart
 echo "Instalando PHP..."
 apt install -y php libapache2-mod-php php-pgsql
 systemctl restart apache2 || /etc/init.d/apache2 restart
+
+# Instalar y habilitar sysstat (monitoreo de performance)
+apt install -y sysstat
+sed -i 's/ENABLED="false"/ENABLED="true"/g' /etc/default/sysstat
+grep 'ENABLED="true"' /etc/default/sysstat || echo 'ENABLED="true"' >> /etc/default/sysstat
+sed -i 's,OnCalendar=\*:00/10,OnCalendar=*:00/05,g' /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer
+systemctl restart sysstat || /etc/init.d/sysstat restart
 
 # Agregar scripts al PATH
 echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
