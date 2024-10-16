@@ -288,10 +288,10 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     check=True,
                 )
                 # Limit memory usage
-                SYSTEMD_USER_SLICE = """
+                SYSTEMD_USER_SLICE = "\n".join(map(str.strip, """
                     [Slice]
                     MemoryMax=1%  # Permitir a un usuario usar hasta un 1/100 de la memoria
-                """
+                """.splitlines()))+"\n"
                 uid_numeric = subprocess.check_output(["id", "-u", name]).decode()
                 subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
                 subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode())
@@ -327,6 +327,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     REVOKE ALL PRIVILEGES ON DATABASE "{user}" FROM PUBLIC;
                 """
                 for line in CREATE_USER_SQL.splitlines():
+                    line = line.strip()
                     if line:
                         line = line.replace("{user}", name)
                         line = line.replace("{password}", password.replace("\\", "\\\\").replace("'", "\\'"))
@@ -384,6 +385,7 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
                     DROP ROLE "{user}";
                 """
                 for line in DESTROY_USER_SQL.splitlines():
+                    line = line.strip()
                     if line:
                         subprocess.run(
                             [
