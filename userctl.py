@@ -10,6 +10,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 import re
+import string
 import sys
 import subprocess
 import os
@@ -31,8 +32,8 @@ def autoinstall_deps(required_deps: dict[str, str]):
                 *[required_deps[depname] for depname in missing],
             ]
         )
-        for modname in missing:
-            importlib.reload(importlib.import_module(modname.replace("-", "_")))
+        print("dependencias instaladas, por favor volver a correr")
+        sys.exit(1)
 
 
 autoinstall_deps(
@@ -594,26 +595,24 @@ class ScanCmd(pydantic_argparse.BaseCommand):
 
 
 class RunCmd(pydantic_argparse.BaseCommand):
-    command: str = Field(
-        description="Comando a correr. Keywords como {id}, {run} o {n_alumno} se reemplazarán por los valores apropiados."
-    )
-
     def run_command_per_user(self, conf: "GlobalArgs"):
         """
         Código para correr un comando arbitrario por usuario
         """
         users = read_system_users()
         
-        REPLACE_PATTERN = r"(^|[^{]){([^{}]+)}"
-        keys = set()
-        for mat in re.finditer(REPLACE_PATTERN, self.command):
-            keys.add(mat[2])
-        keys_without_id = keys.copy()
-        keys_without_id.discard("id")
+        print("ingresar comando: ", file=sys.stderr, flush=True, end="")
+        command = input().strip()
+        if not command:
+            print("error: no se ingresó un comando", file=sys.stderr)
+            sys.exit(1)
+
+        keys = {item[1] for item in string.Formatter().parse(command) if item[1] is not None}
+        keys_without_id = keys - {'id'}
         valid_users: set[str] = {user.id for user in users.values() if keys_without_id.issubset(user.fields.keys())}
         invalid_users = set(users.keys()) - valid_users
         if keys:
-            print(f'el comando "{self.command}" utiliza los atributos {", ".join(keys)}')
+            print(f'el comando "{command}" utiliza los atributos {", ".join(keys)}')
         if invalid_users:
             if not valid_users:
                 print("ningún usuario tiene todos los atributos necesarios definidos. revisa que estén bien escritos.")
@@ -626,10 +625,7 @@ class RunCmd(pydantic_argparse.BaseCommand):
         ok_runs = 0
         for username in sorted(valid_users):
             user = users[username]
-            cmd = self.command
-            cmd = re.sub(REPLACE_PATTERN, lambda mat: mat[1] + (user.id if mat[2] == "id" else user.fields[mat[2]]), cmd)
-            cmd = cmd.replace("{{", "{")
-            cmd = cmd.replace("}}", "}")
+            cmd = command.format(id=user.id, **user.fields)
             print(f'corriendo comando "{cmd}"')
             result = os.system(cmd)
             if result == 0:
@@ -684,7 +680,7 @@ class GlobalArgs(BaseModel):
     )
     run: Optional[RunCmd] = Field(
         None,
-        description="Correr un comando por cada usuario.",
+        description="Correr un comando por cada usuario. El comando se recibe por stdin, y se reemplazan identificadores como {id} o {password}.",
     )
     list: Optional[ListCmd] = Field(
         None,
