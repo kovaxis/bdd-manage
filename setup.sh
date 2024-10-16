@@ -15,13 +15,14 @@ if [ $EUID -ne 0 ]; then
     exit 1
 fi
 USER=$1
+NEED_REBOOT=false
 
 # Desactivar swap (!)
 # Esto es buena idea para que si el servidor se empieza a quedar sin memoria entonces
 # mate procesos en lugar de empezar a usar el disco, que hace que el sistema sea
 # insoportablemente lento y cueste mucho conectarse para arreglarlo (o directamente
 # sea imposible)
-swapoff -va
+swapoff -va || printf "\033[0;31mNo se pudo desactivar el swap!\033[0m\n"
 
 # Instalar esenciales
 echo "Instalando esenciales..."
@@ -68,5 +69,18 @@ echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
 # Escanear diariamente
 echo "1 0 * * * $USER $PWD/bin/userctl scan" > /etc/cron.d/bdd-manage-scan
 
+# Activar cgroups para limitar la memoria maxima por usuario
+if [ ! -f /etc/default/grub.d/50-enable-cgroups.cfg ]; then
+    NEED_REBOOT=true
+fi
+dd of=/etc/default/grub.d/50-enable-cgroups.cfg status=none << EOF || printf "\033[0;31mNo se pudo configurar el limite de memoria por usuario\033[0m\n"
+# Activar cgroups para limitar la memoria maxima por usuario
+GRUB_CMDLINE_LINUX_DEFAULT="\$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory cgroup_memory=1"
+EOF
+
 printf "\033[0;32mServidor configurado!\033[0m\n"
 printf "Recuerda crear los usuarios a partir de una lista de alumnos con el comando \033[0;1muserctl\033[0m (puede requerir relogin)\n"
+
+if $NEED_REBOOT; then
+    printf "\033[0;1mDebes reiniciar el sistema para activar el limite maximo de memoria por usuario\033[0m\n"
+fi
