@@ -294,8 +294,8 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     MemoryMax=1%
                 """.splitlines()))+"\n"
                 uid_numeric = subprocess.check_output(["id", "-u", name]).decode().strip()
-                subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
-                subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode())
+                subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"], check=True)
+                subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode(), check=True)
                 # Initialize home with template
                 if self.template.exists():
                     ensure(
@@ -342,12 +342,18 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                                 line,
                             ],
                             cwd="/",
+                            check=True,
                         )
                 print(f"created user {name}")
                 created += 1
             except subprocess.CalledProcessError:
                 traceback.print_exc()
                 print(f"failed to create user {user.id}")
+        try:
+            subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+        except subprocess.CalledProcessError:
+            traceback.print_exc()
+            print("failed to reload systemd daemon to update resource usage limits")
         new_users = read_system_users()
         print(
             f"existían {len(old_users)} usuarios de alumno, se crearon {created} usuarios nuevos, ahora existen {len(new_users)} usuarios de alumno"
