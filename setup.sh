@@ -16,14 +16,18 @@ if [ $EUID -ne 0 ]; then
 fi
 USER=$1
 
+# Desactivar swap (!)
+# Esto es buena idea para que si el servidor se empieza a quedar sin memoria entonces
+# mate procesos en lugar de empezar a usar el disco, que hace que el sistema sea
+# insoportablemente lento y cueste mucho conectarse para arreglarlo (o directamente
+# sea imposible)
+swapoff -va
+
 # Instalar esenciales
 echo "Instalando esenciales..."
 apt update -y
 apt upgrade -y
 apt install -y git python3 python3-pip cron nano
-
-# Desactivar swap (!)
-swapoff -va
 
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."

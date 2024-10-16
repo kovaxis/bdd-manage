@@ -267,6 +267,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
             try:
                 name = user.id
                 password = user.fields[password_field]
+                # Create Linux user
                 subprocess.run(
                     [
                         "sudo",
@@ -280,11 +281,21 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     ],
                     check=True,
                 )
+                # Set password
                 subprocess.run(
                     ["sudo", "passwd", name],
                     input=f"{password}\n{password}\n".encode(),
                     check=True,
                 )
+                # Limit memory usage
+                SYSTEMD_USER_SLICE = """
+                    [Slice]
+                    MemoryMax=1%  # Permitir a un usuario usar hasta un 1/100 de la memoria
+                """
+                uid_numeric = subprocess.check_output(["id", "-u", name]).decode()
+                subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
+                subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode())
+                # Initialize home with template
                 if self.template.exists():
                     ensure(
                         self.template.is_dir(),
@@ -297,13 +308,17 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                         == 0,
                         "copying home template failed",
                     )
+                # Configurate permissions on home directory
+                # (all permissions to self, read-only to the group, none to others)
                 subprocess.run(
                     ["sudo", "chmod", "-R", "2750", f"/home/{name}"], check=True
                 )
+                # (setup the user's group to www-data so that apache can read from this users' home directory)
                 subprocess.run(
                     ["sudo", "chown", "-R", f"{name}:www-data", f"/home/{name}"],
                     check=True,
                 )
+                # Create the user and its database, and setup postgres permissions
                 CREATE_USER_SQL = """
                     CREATE ROLE "{user}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION;
                     ALTER ROLE "{user}" WITH CONNECTION LIMIT 2;
@@ -361,7 +376,9 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
         for username in delete_users:
             user = sys_users[username]
             try:
+                # Delete the linux user
                 subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
+                # Delete the user's database and postgres user
                 DESTROY_USER_SQL = """
                     DROP DATABASE "{user}";
                     DROP ROLE "{user}";
