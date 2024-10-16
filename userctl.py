@@ -385,12 +385,12 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
         for username in delete_users:
             user = sys_users[username]
             try:
-                # Delete the linux user
-                subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
                 # Delete the systemd cgroup slice that limits memory usage
                 uid_numeric = subprocess.check_output(["id", "-u", user.id]).decode().strip()
                 subprocess.run(["sudo", "rm", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"])
                 subprocess.run(["sudo", "rmdir", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
+                # Delete the linux user
+                subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
                 # Delete the user's database and postgres user
                 DESTROY_USER_SQL = """
                     DROP DATABASE "{user}";
@@ -414,6 +414,11 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
             except subprocess.CalledProcessError:
                 traceback.print_exc()
                 print(f"failed to destroy user {user.id}")
+        try:
+            subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+        except subprocess.CalledProcessError:
+            traceback.print_exc()
+            print("failed to reload systemd daemon to update resource usage limits")
         new_users = read_system_users()
         print(
             f"existían {len(sys_users)} usuarios de alumno, se pidió no eliminar una lista de {len(keep)} alumnos, ahora hay {len(new_users)} usuarios de alumno"
