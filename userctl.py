@@ -290,7 +290,8 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                 # Limit memory usage
                 SYSTEMD_USER_SLICE = "\n".join(map(str.strip, """
                     [Slice]
-                    MemoryMax=1%  # Permitir a un usuario usar hasta un 1/100 de la memoria
+                    # Permitir a un usuario usar hasta un 1/100 de la memoria
+                    MemoryMax=1%
                 """.splitlines()))+"\n"
                 uid_numeric = subprocess.check_output(["id", "-u", name]).decode().strip()
                 subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
