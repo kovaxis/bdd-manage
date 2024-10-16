@@ -387,6 +387,10 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
             try:
                 # Delete the linux user
                 subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
+                # Delete the systemd cgroup slice that limits memory usage
+                uid_numeric = subprocess.check_output(["id", "-u", user.id]).decode().strip()
+                subprocess.run(["sudo", "rm", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"])
+                subprocess.run(["sudo", "rmdir", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
                 # Delete the user's database and postgres user
                 DESTROY_USER_SQL = """
                     DROP DATABASE "{user}";
