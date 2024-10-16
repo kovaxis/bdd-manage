@@ -292,7 +292,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     [Slice]
                     MemoryMax=1%  # Permitir a un usuario usar hasta un 1/100 de la memoria
                 """.splitlines()))+"\n"
-                uid_numeric = subprocess.check_output(["id", "-u", name]).decode()
+                uid_numeric = subprocess.check_output(["id", "-u", name]).decode().strip()
                 subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
                 subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode())
                 # Initialize home with template
