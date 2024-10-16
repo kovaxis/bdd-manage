@@ -28,7 +28,7 @@ USER=$1
 echo "Instalando esenciales..."
 apt update -y
 apt upgrade -y
-apt install -y git python3 python3-pip cron nano
+apt install -y git python3 python3-pip cron nano rsync
 
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."
