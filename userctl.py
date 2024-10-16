@@ -323,7 +323,7 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                 # Create the user and its database, and setup postgres permissions
                 CREATE_USER_SQL = """
                     CREATE ROLE "{user}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN NOREPLICATION;
-                    ALTER ROLE "{user}" WITH CONNECTION LIMIT 2;
+                    ALTER ROLE "{user}" WITH CONNECTION LIMIT 6;
                     ALTER ROLE "{user}" WITH PASSWORD '{password}';
                     CREATE DATABASE "{user}" OWNER "{user}";
                     REVOKE ALL PRIVILEGES ON DATABASE "{user}" FROM PUBLIC;
