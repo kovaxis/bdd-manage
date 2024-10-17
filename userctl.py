@@ -434,6 +434,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         False,
         description="Bloquear las cuentas de los usuarios mientras se realiza el escaneo.",
     )
+    no_scan: bool = Field(False, description="No escanear, generar un reporte solo a partir de escaneos pasados.")
 
     def scan_users(self, conf: "GlobalArgs"):
         """
@@ -443,13 +444,14 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         users = read_system_users()
 
         # Escanear usuarios
-        scan = self.do_scan(scantime, users)
+        if not self.no_scan:
+            scan = self.do_scan(scantime, users)
 
-        # Agregar escaneo al archivo .scandb
-        db_path = CFG_DIR.joinpath(".scandb")
-        with exception_context(f"writing scan to {db_path}"):
-            with open(db_path, "a", encoding="utf-8", opener=opener_private) as db_file:
-                db_file.write(scan.model_dump_json() + "\n")
+            # Agregar escaneo al archivo .scandb
+            db_path = CFG_DIR.joinpath(".scandb")
+            with exception_context(f"writing scan to {db_path}"):
+                with open(db_path, "a", encoding="utf-8", opener=opener_private) as db_file:
+                    db_file.write(scan.model_dump_json() + "\n")
 
         # Generar un reporte
         if self.out:
