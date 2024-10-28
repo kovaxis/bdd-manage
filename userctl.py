@@ -437,6 +437,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         description="Bloquear las cuentas de los usuarios mientras se realiza el escaneo.",
     )
     no_scan: bool = Field(False, description="No escanear, generar un reporte solo a partir de escaneos pasados.")
+    allow_tamper: bool = Field(False, description="Generar un escaneo permitiendo a los alumnos eliminar archivos.")
 
     def scan_users(self, conf: "GlobalArgs"):
         """
@@ -529,10 +530,11 @@ class ScanCmd(pydantic_argparse.BaseCommand):
             now_scantime, now_scan = scans[-1]
             now_hash = self.hash_scan(now_scan)
             change = self.get_scan_mtime(now_scan)
-            for old_scantime, old_scan in reversed(scans[0:-1]):
-                if self.hash_scan(old_scan) != now_hash:
-                    change = max(change, (old_scantime, "mtime was tampered!"))
-                    break
+            if not self.allow_tamper:
+                for old_scantime, old_scan in reversed(scans[0:-1]):
+                    if self.hash_scan(old_scan) != now_hash:
+                        change = max(change, (old_scantime, "mtime was tampered!"))
+                        break
             report.append(
                 ScanReport(
                     usuario=username,
