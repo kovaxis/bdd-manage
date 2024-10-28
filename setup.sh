@@ -53,6 +53,7 @@ apt install -y postgresql postgresql-contrib
 systemctl enable postgresql || true
 systemctl start postgresql || /etc/init.d/postgresql start
 sudo -u postgres psql -U postgres -c "ALTER SYSTEM SET max_connections = 1000;"
+sudo -u postgres psql -U postgres -c "ALTER SYSTEM SET statement_timeout = 60000;"
 sudo -u postgres psql -U postgres -c "ALTER SYSTEM SET listen_addresses = '*';" # Escuchar por conexiones externas
 PG_HBA=$(sudo -u postgres psql -t -P format=unaligned -c 'SHOW hba_file;')
 sudo grep -qE 'host\s+all\s+all\s+all' $PG_HBA || echo 'host all all all scram-sha-256' | sudo tee -a $PG_HBA # Permitir conexiones externas

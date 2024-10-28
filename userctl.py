@@ -290,9 +290,11 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                 )
                 # Limit memory usage
                 SYSTEMD_USER_SLICE = "\n".join(map(str.strip, """
+                    # Limitar uso de memoria y CPU de los usuarios
                     [Slice]
-                    # Permitir a un usuario usar hasta un 1/100 de la memoria
-                    MemoryMax=1%
+                    MemoryHigh=3%
+                    MemoryMax=4%
+                    CPUQuota=50%
                 """.splitlines()))+"\n"
                 uid_numeric = subprocess.check_output(["id", "-u", name]).decode().strip()
                 subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"], check=True)
@@ -512,7 +514,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
                         scans.append(scan)
                     except ValidationError:
                         traceback.print_exc()
-                        print(f"failed to parse scan at line {line}, ignoring")
+                        print(f"failed to parse scan at line {line}, ignoring this scan")
         return scans
 
     def generate_report(self, all_scans: list[Scan], out_path: Path):
