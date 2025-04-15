@@ -66,10 +66,11 @@ systemctl restart apache2 || /etc/init.d/apache2 restart
 
 # Instalar y habilitar sysstat (monitoreo de performance)
 apt install -y sysstat
-sed -i 's/ENABLED="false"/ENABLED="true"/g' /etc/default/sysstat
-grep 'ENABLED="true"' /etc/default/sysstat || echo 'ENABLED="true"' >> /etc/default/sysstat
-sed -i 's,OnCalendar=\*:00/10,OnCalendar=*:00/05,g' /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer
-systemctl restart sysstat || /etc/init.d/sysstat restart
+dpkg-reconfigure sysstat
+#sed -i 's/ENABLED="false"/ENABLED="true"/g' /etc/default/sysstat
+#grep 'ENABLED="true"' /etc/default/sysstat || echo 'ENABLED="true"' >> /etc/default/sysstat
+#sed -i 's,OnCalendar=\*:00/10,OnCalendar=*:00/05,g' /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer
+#systemctl restart sysstat || /etc/init.d/sysstat restart
 
 # Agregar scripts al PATH
 echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
