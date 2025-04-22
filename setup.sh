@@ -28,7 +28,7 @@ USER=$1
 echo "Instalando esenciales..."
 apt update -y
 apt upgrade -y
-apt install -y git python3 python3-pip cron nano rsync
+apt install -y git python3 python3-pip cron nano rsync wget
 
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."
@@ -72,7 +72,11 @@ dpkg-reconfigure sysstat
 #sed -i 's,OnCalendar=\*:00/10,OnCalendar=*:00/05,g' /etc/systemd/system/sysstat.service.wants/sysstat-collect.timer
 #systemctl restart sysstat || /etc/init.d/sysstat restart
 
-# Agregar scripts al PATH
+# Instalar uv
+wget -qO- https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/usr/local/bin" sh
+
+# Instalar scripts de Python
+sudo -u $USER uv sync
 echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
 
 # Escanear diariamente
