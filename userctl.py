@@ -20,7 +20,11 @@ from typing import Any, Optional
 
 
 def autoinstall_deps(required_deps: dict[str, str]):
-    missing = {name for name in required_deps.keys() if not importlib.util.find_spec(name.replace("-", "_"))}
+    missing = {
+        name
+        for name in required_deps.keys()
+        if not importlib.util.find_spec(name.replace("-", "_"))
+    }
     if missing:
         # subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
         subprocess.check_call(
@@ -55,6 +59,7 @@ class FsInfo(BaseModel):
     Información compacta sobre un archivo/directorio.
     Almacena la estructura de los archivos y un hash de cada archivo, pero no los contenidos enteros.
     """
+
     name: str
     mtime: datetime
     contents: list["FsInfo"] | str
@@ -64,6 +69,7 @@ class User(BaseModel):
     """
     Datos sobre un usuario.
     """
+
     id: str
     fields: dict[str, str]
 
@@ -122,9 +128,9 @@ def confirm(msg: str, default_confirm: bool = True) -> None:
     )
     userinput = input().strip().lower()
     if default_confirm:
-        do_cancel = (userinput == "n")
+        do_cancel = userinput == "n"
     else:
-        do_cancel = (userinput != 'y')
+        do_cancel = userinput != "y"
     if do_cancel:
         print("cancelado")
         sys.exit(1)
@@ -145,9 +151,7 @@ def read_userdb() -> dict[str, User]:
     if path.exists():
         try:
             with exception_context(f'reading userdb from "{path}"'):
-                return TypeAdapter(dict[str, User]).validate_json(
-                    path.read_bytes()
-                )
+                return TypeAdapter(dict[str, User]).validate_json(path.read_bytes())
         except Exception:
             traceback.print_exc()
     return {}
@@ -289,16 +293,42 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     check=True,
                 )
                 # Limit memory usage
-                SYSTEMD_USER_SLICE = "\n".join(map(str.strip, """
+                SYSTEMD_USER_SLICE = (
+                    "\n".join(
+                        map(
+                            str.strip,
+                            """
                     # Limitar uso de memoria y CPU de los usuarios
                     [Slice]
                     MemoryHigh=3%
                     MemoryMax=4%
                     CPUQuota=50%
-                """.splitlines()))+"\n"
-                uid_numeric = subprocess.check_output(["id", "-u", name]).decode().strip()
-                subprocess.run(["sudo", "mkdir", "-p", f"/etc/systemd/system/user-{uid_numeric}.slice.d"], check=True)
-                subprocess.run(["sudo", "tee", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"], input=SYSTEMD_USER_SLICE.encode(), check=True)
+                """.splitlines(),
+                        )
+                    )
+                    + "\n"
+                )
+                uid_numeric = (
+                    subprocess.check_output(["id", "-u", name]).decode().strip()
+                )
+                subprocess.run(
+                    [
+                        "sudo",
+                        "mkdir",
+                        "-p",
+                        f"/etc/systemd/system/user-{uid_numeric}.slice.d",
+                    ],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "sudo",
+                        "tee",
+                        f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf",
+                    ],
+                    input=SYSTEMD_USER_SLICE.encode(),
+                    check=True,
+                )
                 # Initialize home with template
                 if self.template.exists():
                     ensure(
@@ -334,7 +364,10 @@ class CreateCmd(pydantic_argparse.BaseCommand):
                     line = line.strip()
                     if line:
                         line = line.replace("{user}", name)
-                        line = line.replace("{password}", password.replace("\\", "\\\\").replace("'", "\\'"))
+                        line = line.replace(
+                            "{password}",
+                            password.replace("\\", "\\\\").replace("'", "\\'"),
+                        )
                         subprocess.run(
                             [
                                 "sudo",
@@ -388,9 +421,19 @@ class DestroyCmd(pydantic_argparse.BaseCommand):
             user = sys_users[username]
             try:
                 # Delete the systemd cgroup slice that limits memory usage
-                uid_numeric = subprocess.check_output(["id", "-u", user.id]).decode().strip()
-                subprocess.run(["sudo", "rm", f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf"])
-                subprocess.run(["sudo", "rmdir", f"/etc/systemd/system/user-{uid_numeric}.slice.d"])
+                uid_numeric = (
+                    subprocess.check_output(["id", "-u", user.id]).decode().strip()
+                )
+                subprocess.run(
+                    [
+                        "sudo",
+                        "rm",
+                        f"/etc/systemd/system/user-{uid_numeric}.slice.d/50-limit-memory.conf",
+                    ]
+                )
+                subprocess.run(
+                    ["sudo", "rmdir", f"/etc/systemd/system/user-{uid_numeric}.slice.d"]
+                )
                 # Delete the linux user
                 subprocess.run(["sudo", "deluser", user.id, "--remove-home"])
                 # Delete the user's database and postgres user
@@ -436,8 +479,18 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         False,
         description="Bloquear las cuentas de los usuarios mientras se realiza el escaneo.",
     )
-    no_scan: bool = Field(False, description="No escanear, generar un reporte solo a partir de escaneos pasados.")
-    allow_tamper: bool = Field(False, description="Generar un escaneo permitiendo a los alumnos eliminar archivos.")
+    no_scan: bool = Field(
+        False,
+        description="No escanear, generar un reporte solo a partir de escaneos pasados.",
+    )
+    allow_tamper: bool = Field(
+        False,
+        description="Generar un escaneo permitiendo a los alumnos eliminar archivos.",
+    )
+    subdirectory: Path = Field(
+        Path("."),
+        description="Escanear específicamente esta subcarpeta dentro de la carpeta home.",
+    )
 
     def scan_users(self, conf: "GlobalArgs"):
         """
@@ -453,7 +506,9 @@ class ScanCmd(pydantic_argparse.BaseCommand):
 
             # Agregar escaneo al archivo .scandb
             with exception_context(f"writing scan to {db_path}"):
-                with open(db_path, "a", encoding="utf-8", opener=opener_private) as db_file:
+                with open(
+                    db_path, "a", encoding="utf-8", opener=opener_private
+                ) as db_file:
                     db_file.write(scan.model_dump_json() + "\n")
 
         # Generar un reporte
@@ -515,7 +570,9 @@ class ScanCmd(pydantic_argparse.BaseCommand):
                         scans.append(scan)
                     except ValidationError:
                         traceback.print_exc()
-                        print(f"failed to parse scan at line {line}, ignoring this scan")
+                        print(
+                            f"failed to parse scan at line {line}, ignoring this scan"
+                        )
         return scans
 
     def generate_report(self, all_scans: list[Scan], out_path: Path):
@@ -580,7 +637,21 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         return hx.digest()
 
     def get_scan_mtime(self, scan: UserScan) -> tuple[datetime, str]:
-        return self.get_fsinfo_mtime(scan.home, "/") or (scan.home.mtime, "/")
+        fsinfo = scan.home
+        deleted = (datetime.now(), f"{self.subdirectory} does not exist")
+        for part in self.subdirectory.parts:
+            if not isinstance(fsinfo.contents, list):
+                return deleted
+            for subfile in fsinfo.contents:
+                if subfile.name == part:
+                    fsinfo = subfile
+                    break
+            else:
+                return deleted
+        return self.get_fsinfo_mtime(fsinfo, f"{self.subdirectory}") or (
+            fsinfo.mtime,
+            f"{self.subdirectory}",
+        )
 
     def get_fsinfo_mtime(
         self, fsinfo: FsInfo, path: str
@@ -590,9 +661,7 @@ class ScanCmd(pydantic_argparse.BaseCommand):
         else:
             max_mtime: tuple[datetime, str] | None = None
             for sub in fsinfo.contents:
-                sub_mtime = self.get_fsinfo_mtime(
-                    sub, path + fsinfo.name + "/"
-                )
+                sub_mtime = self.get_fsinfo_mtime(sub, path + fsinfo.name + "/")
                 if sub_mtime is not None and (
                     max_mtime is None or sub_mtime > max_mtime
                 ):
@@ -615,26 +684,38 @@ class RunCmd(pydantic_argparse.BaseCommand):
         Código para correr un comando arbitrario por usuario
         """
         users = read_system_users()
-        
+
         print("ingresar comando: ", file=sys.stderr, flush=True, end="")
         command = input().strip()
         if not command:
             print("error: no se ingresó un comando", file=sys.stderr)
             sys.exit(1)
 
-        keys = {item[1] for item in string.Formatter().parse(command) if item[1] is not None}
-        keys_without_id = keys - {'id'}
-        valid_users: set[str] = {user.id for user in users.values() if keys_without_id.issubset(user.fields.keys())}
+        keys = {
+            item[1] for item in string.Formatter().parse(command) if item[1] is not None
+        }
+        keys_without_id = keys - {"id"}
+        valid_users: set[str] = {
+            user.id
+            for user in users.values()
+            if keys_without_id.issubset(user.fields.keys())
+        }
         invalid_users = set(users.keys()) - valid_users
         if keys:
             print(f'el comando "{command}" utiliza los atributos {", ".join(keys)}')
         if invalid_users:
             if not valid_users:
-                print("ningún usuario tiene todos los atributos necesarios definidos. revisa que estén bien escritos.")
+                print(
+                    "ningún usuario tiene todos los atributos necesarios definidos. revisa que estén bien escritos."
+                )
                 sys.exit(1)
-            print(f"{len(invalid_users)}/{len(users)} usuarios tienen estos atributos indefinidos")
+            print(
+                f"{len(invalid_users)}/{len(users)} usuarios tienen estos atributos indefinidos"
+            )
             print(f"se ignorarán estos usuarios: {', '.join(sorted(invalid_users))}")
-            confirm(f"confirmas que quieres correr el comando solo para {len(valid_users)}/{len(users)} usuarios?")
+            confirm(
+                f"confirmas que quieres correr el comando solo para {len(valid_users)}/{len(users)} usuarios?"
+            )
 
         print(f"corriendo comando para {len(valid_users)} usuarios")
         ok_runs = 0
