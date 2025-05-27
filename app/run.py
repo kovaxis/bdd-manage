@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 from typer import Typer
@@ -11,6 +12,7 @@ from app.util import CmdBase, find_users_in_group
 app = Typer()
 
 
+@dataclass(kw_only=True)
 class RunCmd(CmdBase):
     cmd: str
     userdicts: dict[str, dict[str, str]]
@@ -79,9 +81,11 @@ def run_command_per_user(group_name: str | None, *, config_path: Path | None = N
             f"{len(invalid_users)}/{len(userdicts)} usuarios tienen estos atributos indefinidos"
         )
         print(f"Se ignorarán estos usuarios: {', '.join(sorted(invalid_users))}")
-        typer.confirm(
+        confirmed = typer.confirm(
             f"Confirmas que quieres correr el comando solo para {len(valid_users)}/{len(userdicts)} usuarios?"
         )
+        if not confirmed:
+            raise InterruptedError("Aborted")
 
     runcmd = RunCmd(
         failures={},

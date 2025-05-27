@@ -103,6 +103,7 @@ def read_config(cfg_path: Path | None) -> Config:
         with exception_context(f"reading config file from '{cfg_path}'"):
             if not cfg_path.exists():
                 cfg_path.write_bytes(EXAMPLE_CFG.model_dump_json(indent=4).encode())
+                print(f"wrote example config to {cfg_path}")
             cfg = ConfigProto.model_validate_json(cfg_path.read_bytes())
         out = Config(groups=[])
         for groupproto in cfg.groups:
@@ -133,7 +134,7 @@ def read_config(cfg_path: Path | None) -> Config:
                 seen_prefixes: set[str] = set()
                 for user in users_to_add:
                     ensure(
-                        user.prefix in seen_prefixes,
+                        user.prefix not in seen_prefixes,
                         f"Usuario duplicado: '{build_userid(user.prefix, groupproto.suffix)}'",
                     )
                     seen_prefixes.add(user.prefix)
@@ -145,13 +146,14 @@ def read_config(cfg_path: Path | None) -> Config:
         return out
     except ValidationError:
         traceback.print_exc()
+        print("Configuración inválida.")
         print(
-            "configuración inválida. revisa la configuración de ejemplo en 'example-config.json'"
+            "Prueba moviendo la configuración a una ubicación temporal y corre el comando de nuevo para regenerar la configuración de ejemplo."
         )
         sys.exit(1)
     except FileNotFoundError:
         print(
-            f"no se encontro la lista de alumnos en '{cfg_path}'",
+            f"No se encontró la configuración en '{cfg_path}'",
             file=sys.stderr,
         )
         sys.exit(1)

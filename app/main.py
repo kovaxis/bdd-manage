@@ -38,4 +38,7 @@ if __name__ == "__main__":
     if os.geteuid() == 0:
         print("userctl should not run as root")
         sys.exit(1)
-    app()
+    try:
+        app()
+    except InterruptedError:
+        sys.exit(1)

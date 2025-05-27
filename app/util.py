@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from collections.abc import Callable
 import contextlib
+from dataclasses import dataclass, field
 import os
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -48,12 +49,19 @@ def opener_private(path: str, flags: int) -> int:
     return os.open(path, flags, 0o600)
 
 
-def cmd_repr(s: str) -> str:
+def repr_cmdpart(s: str) -> str:
     r = repr(s)
-    if r == f'"{s}"':
+    if r == f"'{s}'":
         return s
     else:
         return r
+
+
+def repr_cmd(cmd: str | list[str]) -> str:
+    if isinstance(cmd, str):
+        return repr_cmdpart(cmd)
+    else:
+        return " ".join(repr_cmdpart(arg) for arg in cmd)
 
 
 class UserBundle(BaseModel):
@@ -83,13 +91,15 @@ def find_users_in_group(
 T = TypeVar("T", default=UserBundle)
 
 
-class CmdBase(BaseModel, Generic[T]):
+@dataclass(kw_only=True)
+class CmdBase(Generic[T]):
     type CmdSpec = list[str] | str
     type CmdArgs = dict[str, str] | Callable[[T], dict[str, str] | None]
 
     getid: Callable[[T], str]
     failures: dict[str, Exception]
-    users: list[T] = []
+    users: list[T] = field(default_factory=list)
+    sequential: bool = True
 
     @staticmethod
     def newbundle(user: UserConfig, group: UserGroup) -> UserBundle:
@@ -97,10 +107,13 @@ class CmdBase(BaseModel, Generic[T]):
             user=user, group=group, id=build_userid(user.prefix, group.suffix)
         )
 
-    def fail(self, data: T, exc: Exception):
+    def fail(self, data: T, exc: Exception, critical: bool):
         username = (self.getid)(data)
-        print(f"user {username} failed: {exc}")
-        self.failures[username] = exc
+        if critical:
+            self.failures[username] = exc
+            print(f"user {username} critically failed: {exc}")
+        else:
+            print(f"subcommand for user {username} failed: {exc}")
 
     def runcmd(
         self,
@@ -110,14 +123,17 @@ class CmdBase(BaseModel, Generic[T]):
         cwd: Path | None = None,
         input: str | None = None,
         capture_output: bool = False,
+        critical: bool = True,
     ):
+        if len(self.users) == 0:
+            return
         print(
-            f"$ {' '.join(cmd_repr(arg) for arg in cmd)}{'' if input is None else f'< {cmd_repr(input)}'}"
+            f"$ {repr_cmd(cmd)}{'' if input is None else f' < {repr_cmdpart(input)}'}"
         )
         tries = 0
         oks = 0
         for data in self.users:
-            if (self.getid)(data) in self.failures:
+            if self.sequential and (self.getid)(data) in self.failures:
                 continue
             # Personalize args
             if isinstance(args, dict):
@@ -128,7 +144,7 @@ class CmdBase(BaseModel, Generic[T]):
                     continue
             # Get input
             cmd_input = (
-                None if input is None else input.format(user_args).encode("utf-8")
+                None if input is None else input.format(**user_args).encode("utf-8")
             )
             # Run personalized cmd
             tries += 1
@@ -138,7 +154,9 @@ class CmdBase(BaseModel, Generic[T]):
                 if exit_status == 0:
                     oks += 1
                 else:
-                    self.fail(data, RuntimeError(f"command failed: '{user_cmd}'"))
+                    self.fail(
+                        data, RuntimeError(f"command failed: '{user_cmd}'"), critical
+                    )
             else:
                 user_cmd = [arg.format(**user_args) for arg in cmd]
                 try:
@@ -151,7 +169,7 @@ class CmdBase(BaseModel, Generic[T]):
                     )
                     oks += 1
                 except subprocess.CalledProcessError as e:
-                    self.fail(data, e)
+                    self.fail(data, e, critical)
         print(f"    executed {tries} times, failed {tries - oks} times")
 
     def runsql(self, query: str, args: CmdArgs):

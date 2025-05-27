@@ -12,7 +12,7 @@ from pydantic import (
 Percentage = Annotated[str, StringConstraints(pattern=r"^\d+%$")]
 
 EMAIL_PATTERN = re.compile(r"^([^@]+)@([^.]+(?:\.[^.]+)+)$")
-USERSTR_SIGNATURE_PATTERN = re.compile(r"bdd-manage-user-([0-9a-f])")
+USERSTR_SIGNATURE_PATTERN = re.compile(r"bdd-manage-user-([0-9a-f]+)")
 USERNAME_PATTERN = re.compile(r"(.+)\.([^.]*)")
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / ".users.json"

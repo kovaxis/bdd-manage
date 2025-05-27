@@ -4,6 +4,7 @@ from datetime import datetime
 import gzip
 from pathlib import Path
 import traceback
+from typing import Annotated
 from pydantic import BaseModel, Field, ValidationError
 from typer import Typer
 
@@ -55,7 +56,7 @@ class ReportCtx:
                     continue
                 if len(homein) != 0 and homein[0] != child.name:
                     continue
-                self.subflatten(out, path / child.name, fsinfo, homein[1:])
+                self.subflatten(out, path / child.name, child, homein[1:])
 
     def flatten(self, fsinfo: FsInfo) -> dict[Path, FileItem]:
         out: dict[Path, FileItem] = {}
@@ -177,28 +178,38 @@ def generate_report_for_user(
 
 @app.command("report", help="Generar un reporte de última modificación de archivos.")
 def generate_report(
-    out: Path,
+    group_name: Annotated[
+        str | None,
+        Field(description="Generar reporte solo para los usuarios en este grupo."),
+    ],
+    out: Annotated[
+        Path, Field(description="Dónde guardar el .csv generado como reporte.")
+    ],
     *,
     config_path: Path | None = None,
     db_path: Path | None = None,
-    group_name: str | None = Field(
-        None, description="Generar reporte solo para los usuarios en este grupo."
-    ),
-    min_time: datetime | None = Field(
-        None, description="Considerar desde este tiempo en adelante."
-    ),
-    max_time: datetime | None = Field(
-        None, description="Considerar solo hasta este tiempo."
-    ),
-    subdir: Path = Field(Path("."), description="Considerar solo este subdirectorio."),
-    ignore_hidden: bool = Field(
-        True,
-        description="Ignorar archivos que comienzen con '.' para el cálculo de última modificación.",
-    ),
-    ignore_metadata: bool = Field(
-        True,
-        description="Ignorar cambios de metadata, y solo considerar cambios de contenido en archivos.",
-    ),
+    min_time: Annotated[
+        datetime | None,
+        Field(description="Considerar desde este tiempo en adelante."),
+    ] = None,
+    max_time: Annotated[
+        datetime | None, Field(description="Considerar solo hasta este tiempo.")
+    ] = None,
+    subdir: Annotated[
+        Path, Field(description="Considerar solo este subdirectorio.")
+    ] = Path("."),
+    ignore_hidden: Annotated[
+        bool,
+        Field(
+            description="Ignorar archivos que comienzen con '.' para el cálculo de última modificación.",
+        ),
+    ] = True,
+    ignore_metadata: Annotated[
+        bool,
+        Field(
+            description="Ignorar cambios de metadata, y solo considerar cambios de contenido en archivos.",
+        ),
+    ] = True,
 ):
     config = sync_state(config_path=config_path)
     user_bundles = find_users_in_group(config, group_name)

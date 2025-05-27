@@ -33,7 +33,7 @@ apt install -y git python3 python3-pip cron nano rsync wget
 # Instalar Apache (servidor web)
 echo "Instalando y configurando Apache..."
 apt install -y apache2
-read -p "Ingrese hostname del servidor (eg. pavlov.ing.puc.cl): " HOSTNAME
+read -p "Ingrese hostname del servidor (eg. bdd1.ing.puc.cl): " HOSTNAME
 sed "s/{HOSTNAME}/$HOSTNAME/g" apache.conf > /etc/apache2/sites-available/000-default.conf
 systemctl enable apache2 || true
 systemctl start apache2 || /etc/init.d/apache2 start

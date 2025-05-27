@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typer import Typer
 from pathlib import Path
 import subprocess
@@ -19,6 +20,7 @@ def reload_systemd():
         print("failed to reload systemd daemon to update resource usage limits")
 
 
+@dataclass
 class CreateCmd(CmdBase):
     def exec(self):
         # Create Linux users
@@ -105,6 +107,7 @@ class CreateCmd(CmdBase):
         )
 
 
+@dataclass
 class ConfigureCmd(CmdBase):
     def exec(self):
         # Set Linux usercomment
@@ -215,7 +218,10 @@ class ConfigureCmd(CmdBase):
         )
 
 
+@dataclass
 class DeleteCmd(CmdBase[str]):
+    sequential: bool = False
+
     def exec(self):
         # Get numeric UIDs for all users to destroy
         user_uids: dict[str, str] = {
@@ -260,11 +266,7 @@ class DeleteCmd(CmdBase[str]):
         )
 
 
-@app.command(
-    "sync",
-    help="Aplicar la configuración en el estado del servidor, creando o destruyendo cosas para calzar.",
-)
-def sync_state(*, config_path: Path | None = None) -> Config:
+def sync_state(config_path: Path | None, explicit: bool = False) -> Config:
     old_users = read_system_users()
     config = read_config(config_path)
 
@@ -278,7 +280,8 @@ def sync_state(*, config_path: Path | None = None) -> Config:
             userid = build_userid(user.prefix, group.suffix)
             if userid not in old_users.by_id:
                 create.users.append(CmdBase.newbundle(user, group))
-            configure.users.append(CmdBase.newbundle(user, group))
+            if explicit or userid not in old_users.by_id:
+                configure.users.append(CmdBase.newbundle(user, group))
             new_user_ids_set.add(userid)
     destroy = DeleteCmd(failures=failures, getid=lambda username: username)
     for userid in sorted(set(user.id for user in old_users.as_list) - new_user_ids_set):
@@ -295,10 +298,16 @@ def sync_state(*, config_path: Path | None = None) -> Config:
     destroy_set = sorted(destroy.users)
     if destroy_set:
         print(f"Se destruirán {len(destroy_set)} usuarios: {' '.join(destroy_set)}")
-        typer.confirm(
+        confirmed = typer.confirm(
             f"Seguro que deseas destruir estos {len(destroy.users)} usuarios, junto con sus carpetas home?",
             False,
         )
+        if not confirmed:
+            raise InterruptedError("Aborted")
+
+    if not create_set and not reconf_set and not destroy_set:
+        print(f"{len(new_user_ids_set)} usuarios, nada que hacer")
+        return config
 
     create.exec()
     configure.exec()
@@ -316,3 +325,11 @@ def sync_state(*, config_path: Path | None = None) -> Config:
     )
 
     return config
+
+
+@app.command(
+    "sync",
+    help="Aplicar la configuración en el estado del servidor, creando o destruyendo cosas para calzar.",
+)
+def sync_state_cmd(*, config_path: Path | None = None):
+    sync_state(config_path)
