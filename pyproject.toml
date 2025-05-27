@@ -5,6 +5,7 @@ description = "Manejar un servidor para el ramo IIC2413 Bases de Datos"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "canvasapi>=3.3.0",
     "pydantic>=2.11.3",
     "typer>=0.15.2",
 ]

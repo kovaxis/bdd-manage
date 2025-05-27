@@ -4,7 +4,7 @@ import contextlib
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from pydantic import (
     BaseModel,
     TypeAdapter,
@@ -115,6 +115,30 @@ class CmdBase(Generic[T]):
         else:
             print(f"subcommand for user {username} failed: {exc}")
 
+    def runfunc(
+        self,
+        func: Callable[[T], None | Literal[False]],
+        *,
+        critical: bool = True,
+        errortype: type[Exception] | tuple[type[Exception], ...] = Exception,
+    ) -> tuple[int, int]:
+        tries = 0
+        oks = 0
+        for data in self.users:
+            if self.sequential and (self.getid)(data) in self.failures:
+                continue
+            # Run custom function
+            tries += 1
+            try:
+                result = func(data)
+                if result is False:
+                    tries -= 1
+                else:
+                    oks += 1
+            except errortype as err:
+                self.fail(data, err, critical)
+        return oks, tries
+
     def runcmd(
         self,
         cmd: CmdSpec,
@@ -130,46 +154,40 @@ class CmdBase(Generic[T]):
         print(
             f"$ {repr_cmd(cmd)}{'' if input is None else f' < {repr_cmdpart(input)}'}"
         )
-        tries = 0
-        oks = 0
-        for data in self.users:
-            if self.sequential and (self.getid)(data) in self.failures:
-                continue
+
+        def run_it(data: T):
             # Personalize args
             if isinstance(args, dict):
                 user_args = args
             else:
                 user_args = args(data)
                 if user_args is None:
-                    continue
+                    return False
             # Get input
             cmd_input = (
                 None if input is None else input.format(**user_args).encode("utf-8")
             )
             # Run personalized cmd
-            tries += 1
             if isinstance(cmd, str):
                 user_cmd = cmd.format(**user_args)
                 exit_status = os.system(user_cmd)
-                if exit_status == 0:
-                    oks += 1
-                else:
-                    self.fail(
-                        data, RuntimeError(f"command failed: '{user_cmd}'"), critical
-                    )
+                if exit_status != 0:
+                    raise RuntimeError(f"command failed: '{user_cmd}'")
             else:
                 user_cmd = [arg.format(**user_args) for arg in cmd]
-                try:
-                    subprocess.run(
-                        user_cmd,
-                        check=True,
-                        cwd=cwd,
-                        input=cmd_input,
-                        capture_output=capture_output,
-                    )
-                    oks += 1
-                except subprocess.CalledProcessError as e:
-                    self.fail(data, e, critical)
+                subprocess.run(
+                    user_cmd,
+                    check=True,
+                    cwd=cwd,
+                    input=cmd_input,
+                    capture_output=capture_output,
+                )
+
+        oks, tries = self.runfunc(
+            run_it,
+            critical=critical,
+            errortype=(subprocess.CalledProcessError, RuntimeError),
+        )
         print(f"    executed {tries} times, failed {tries - oks} times")
 
     def runsql(self, query: str, args: CmdArgs):

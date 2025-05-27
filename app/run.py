@@ -50,8 +50,9 @@ def run_command_per_user(group_name: str | None, *, config_path: Path | None = N
     userdicts: dict[str, dict[str, str]] = {}
     for bundle in user_bundles:
         userdict: dict[str, str] = {}
-        for key, val in bundle.user.model_dump():
+        for key, val in bundle.user.model_dump().items():
             userdict[key] = str(val)
+        userdict["id"] = bundle.id
         userdicts[bundle.id] = userdict
 
     valid_users: set[str] = {
