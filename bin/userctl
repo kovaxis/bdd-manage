@@ -1,1 +1,6 @@
-../userctl.py
+#!/usr/bin/sh
+
+set -e
+cd "$(dirname "$0")/.."
+
+exec uv run python -m app.main -- "$@"
