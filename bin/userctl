@@ -3,4 +3,4 @@
 set -e
 cd "$(dirname "$0")/.."
 
-uv run python -m app.main
+uv run python -m app.main -- "$@"

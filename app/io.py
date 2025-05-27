@@ -1,30 +1,16 @@
-from abc import abstractmethod
-from collections.abc import Callable
-from rich import reconfigure
-from typer import Typer
-import contextlib
 import csv
-from datetime import datetime
 from pathlib import Path
-import re
-import string
 import sys
-import subprocess
-import os
 import traceback
-from hashlib import blake2b as good_hash
-from typing import Annotated, Any, Generic, Optional, TypeVar
+from typing import Annotated
 from pydantic import (
-    AfterValidator,
     BaseModel,
-    Field,
     StringConstraints,
     TypeAdapter,
     ValidationError,
-    model_validator,
 )
 
-from app.types import Config, UserGroup
+from app.types import DEFAULT_CONFIG_PATH, Config, UserGroup
 from app.types import (
     USERNAME_PATTERN,
     USERSTR_SIGNATURE_PATTERN,
@@ -38,7 +24,7 @@ from app.util import build_userid, ensure, exception_context
 
 class UserGroupProto(BaseModel):
     suffix: Annotated[str, StringConstraints(pattern=r"[a-zA-Z0-9\-_]{1,24}")]
-    base: UserConfigBase
+    base: UserConfigBase = UserConfigBase()
     users: list[UserConfig]
     csv: dict[str, str]
 
@@ -46,6 +32,21 @@ class UserGroupProto(BaseModel):
 class ConfigProto(BaseModel):
     base: UserConfigBase
     groups: list[UserGroupProto]
+
+
+EXAMPLE_CFG: ConfigProto = ConfigProto(
+    base=UserConfigBase(),
+    groups=[
+        UserGroupProto(
+            suffix="example",
+            base=UserConfigBase(),
+            users=[],
+            csv={
+                "example-userlist": "",
+            },
+        )
+    ],
+)
 
 
 def read_system_users() -> SystemUsers:
@@ -90,13 +91,18 @@ def read_system_users() -> SystemUsers:
     return SystemUsers(as_list=users, by_id=by_id, by_group=by_group)
 
 
-def read_config(cfg_path: Path) -> Config:
+def read_config(cfg_path: Path | None) -> Config:
     """
     Leer una configuración de alumnos en formato JSON, posiblemente con CSV embebido.
     """
 
+    if cfg_path is None:
+        cfg_path = DEFAULT_CONFIG_PATH
+
     try:
         with exception_context(f"reading config file from '{cfg_path}'"):
+            if not cfg_path.exists():
+                cfg_path.write_bytes(EXAMPLE_CFG.model_dump_json(indent=4).encode())
             cfg = ConfigProto.model_validate_json(cfg_path.read_bytes())
         out = Config(groups=[])
         for groupproto in cfg.groups:

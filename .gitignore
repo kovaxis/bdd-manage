@@ -3,6 +3,8 @@ __pycache__
 /user_template
 /.scandb
 /.userdb
+/.users.json
+/.userdb.jsonl.gz
 lista*.csv
 reporte*.csv
 !lista-ejemplo.csv

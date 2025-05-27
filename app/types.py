@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 import re
 from typing import Annotated, Any
@@ -13,6 +14,9 @@ Percentage = Annotated[str, StringConstraints(pattern=r"^\d+%$")]
 EMAIL_PATTERN = re.compile(r"^([^@]+)@([^.]+(?:\.[^.]+)+)$")
 USERSTR_SIGNATURE_PATTERN = re.compile(r"bdd-manage-user-([0-9a-f])")
 USERNAME_PATTERN = re.compile(r"(.+)\.([^.]*)")
+
+DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / ".users.json"
+DEFAULT_SCANS_PATH = Path(__file__).parent.parent / ".scandb.jsonl.gz"
 
 
 class UserConfigBase(BaseModel):
@@ -82,3 +86,34 @@ class SystemUsers(BaseModel):
     as_list: list[SystemUser]
     by_id: dict[str, SystemUser]
     by_group: dict[str, dict[str, SystemUser]]
+
+
+class FsInfo(BaseModel):
+    """
+    Información compacta sobre un archivo/directorio.
+    Almacena la estructura de los archivos y un hash de cada archivo, pero no los contenidos enteros.
+    """
+
+    name: str
+    mtime: int
+    ctime: int
+    mode: int
+    contents: list["FsInfo"] | str
+
+
+class UserScan(BaseModel):
+    """
+    Datos de entrega de un usuario.
+    Un snapshot de la carpeta `home` del usuario.
+    """
+
+    home: FsInfo
+
+
+class Scan(BaseModel):
+    """
+    Un escaneo hecho en una fecha/hora particular.
+    """
+
+    scantime: datetime
+    users: dict[str, UserScan]

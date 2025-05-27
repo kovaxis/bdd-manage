@@ -9,12 +9,16 @@ import os
 from app.io import read_system_users
 from app.scan import app as scan_app
 from app.sync import app as sync_app
+from app.run import app as run_app
+from app.report import app as report_app
 
 
 app = Typer()
 
-app.add_typer(scan_app)
 app.add_typer(sync_app)
+app.add_typer(run_app)
+app.add_typer(scan_app)
+app.add_typer(report_app)
 
 
 @app.command(
