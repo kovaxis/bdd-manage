@@ -40,6 +40,9 @@ if __name__ == "__main__":
     if os.geteuid() == 0:
         print("userctl should not run as root")
         sys.exit(1)
+    og_pwd = os.getenv("ORIGINAL_PWD")
+    if og_pwd is not None:
+        os.chdir(og_pwd)
     try:
         app()
     except InterruptedError:
