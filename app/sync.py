@@ -331,5 +331,5 @@ def sync_state(config_path: Path | None, explicit: bool = False) -> Config:
     "sync",
     help="Aplicar la configuración en el estado del servidor, creando o destruyendo cosas para calzar.",
 )
-def sync_state_cmd(*, config_path: Path | None = None):
-    sync_state(config_path)
+def sync_state_cmd(*, config_path: Path | None = None, explicit: bool = True):
+    sync_state(config_path, explicit=explicit)
