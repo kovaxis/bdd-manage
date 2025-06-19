@@ -4,7 +4,7 @@ __pycache__
 /.scandb
 /.userdb
 /.users.json
-/.userdb.jsonl.gz
+/.scandb.jsonl.gz
 lista*.csv
 reporte*.csv
 !lista-ejemplo.csv
