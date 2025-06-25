@@ -141,7 +141,7 @@ def read_config(cfg_path: Path | None) -> Config:
                 outgroup = UserGroup(suffix=groupproto.suffix, users=users_to_add)
                 out.groups.append(outgroup)
         print(
-            f"read {sum(len(g.users) for g in out.groups)} users in {len(out.groups)} groups from {cfg_path}"
+            f"Read {sum(len(g.users) for g in out.groups)} users in {len(out.groups)} groups from {cfg_path}"
         )
         return out
     except ValidationError:

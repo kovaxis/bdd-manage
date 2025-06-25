@@ -306,7 +306,7 @@ def sync_state(config_path: Path | None, explicit: bool = False) -> Config:
             raise InterruptedError("Aborted")
 
     if not create_set and not reconf_set and not destroy_set:
-        print(f"{len(new_user_ids_set)} usuarios, nada que hacer")
+        print(f"{len(new_user_ids_set)} usuarios, sin sincronizaciones pendientes")
         return config
 
     create.exec()
