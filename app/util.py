@@ -39,7 +39,7 @@ def exception_context(msg: str):
         raise
 
 
-def ensure(cond: Any, *ctx):
+def ensure(cond: Any, *ctx: str):
     if not cond:
         msg = ": ".join(("assertion failed",) + ctx)
         raise AssertionError(msg)
@@ -98,7 +98,7 @@ class CmdBase(Generic[T]):
 
     getid: Callable[[T], str]
     failures: dict[str, Exception]
-    users: list[T] = field(default_factory=list)
+    users: list[T] = field(default_factory=list[T])
     sequential: bool = True
 
     @staticmethod
@@ -157,12 +157,15 @@ class CmdBase(Generic[T]):
 
         def run_it(data: T):
             # Personalize args
+            user_args: dict[str, str]
             if isinstance(args, dict):
-                user_args = args
+                user_args = args  # type: ignore
             else:
-                user_args = args(data)
-                if user_args is None:
+                maybe_user_args = args(data)
+                if maybe_user_args is None:
                     return False
+                else:
+                    user_args = maybe_user_args
             # Get input
             cmd_input = (
                 None if input is None else input.format(**user_args).encode("utf-8")

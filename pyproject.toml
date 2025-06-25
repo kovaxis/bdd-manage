@@ -9,3 +9,9 @@ dependencies = [
     "pydantic>=2.11.3",
     "typer>=0.15.2",
 ]
+
+[tool.pyright]
+include = ["app"]
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"

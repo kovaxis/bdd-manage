@@ -59,7 +59,7 @@ class UserConfig(UserConfigBase):
             mat = EMAIL_PATTERN.fullmatch(email)
             if mat:
                 data["prefix"] = mat[1]
-        return data
+        return data  # type: ignore
 
 
 class UserGroup(BaseModel):
