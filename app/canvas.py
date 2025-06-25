@@ -31,27 +31,27 @@ class SendCmd(CmdBase):
         # Buscar el curso apropiado (el último curso que tenga la sigla apropiada en course_code)
         print("scanning Canvas courses...")
         course: canvasapi.course.Course | None = None
-        courses: list[canvasapi.course.Course] = [c for c in canvas.get_courses()]
+        courses: list[canvasapi.course.Course] = [c for c in canvas.get_courses()]  # type: ignore
         for c in courses:
-            if self.course_code.lower() in c.course_code.lower():
-                if course is None or c.created_at > course.created_at:
+            if self.course_code.lower() in c.course_code.lower():  # type: ignore
+                if course is None or c.created_at > course.created_at:  # type: ignore
                     course = c
         if course is None:
             raise RuntimeError(
-                f"Could not find a course with course_code {self.course_code}. Available codes: {', '.join(c.course_code for c in courses)}"
+                f"Could not find a course with course_code {self.course_code}. Available codes: {', '.join(c.course_code for c in courses)}"  # type: ignore
             )
         print(
-            f"using course {course.id} ({course.course_code} {course.name} {course.created_at})"
+            f"using course {course.id} ({course.course_code} {course.name} {course.created_at})"  # type: ignore
         )
 
         # Buscar todos los usuarios y meterlos a un diccionario
         print("scanning all users in course...")
         users: dict[str, canvasapi.user.User] = {}
-        for user in course.get_users():
+        for user in course.get_users():  # type: ignore
             user: canvasapi.user.User
-            profile: dict[str, Any] = user.get_profile()
+            profile: dict[str, Any] = user.get_profile()  # type: ignore
             if "login_id" in profile:
-                login_id = profile["login_id"]
+                login_id = profile["login_id"]  # type: ignore
                 if isinstance(login_id, str):
                     users[login_id] = user
         print(f"scanned {len(users)} Canvas users")
@@ -66,12 +66,12 @@ class SendCmd(CmdBase):
                 handle = data.user.prefix
             else:
                 raise RuntimeError("user not found in Canvas user list")
-            canvas.create_conversation(
-                recipients=[str(user.id)],
+            canvas.create_conversation(  # type: ignore
+                recipients=[str(user.id)],  # type: ignore
                 subject=self.subject.format(**user_args),
                 body=self.body.format(**user_args),
                 force_new=True,
-                context_code=f"course_{course.id}",
+                context_code=f"course_{course.id}",  # type: ignore
             )
             print(f"sent Canvas message to {handle}")
 
