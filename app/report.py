@@ -224,10 +224,9 @@ def generate_report(
     regex: Annotated[
         str | None,
         Field(
-            None,
             description="Filtrar usando esta expresión regular. (OJO: No es un glob-pattern)",
         ),
-    ],
+    ] = None,
 ):
     compiled_regex = None if regex is None else re.compile(regex)
 
