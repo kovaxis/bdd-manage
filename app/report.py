@@ -222,13 +222,15 @@ def generate_report(
         ),
     ] = True,
     regex: Annotated[
-        re.Pattern[str] | None,
+        str | None,
         Field(
             None,
             description="Filtrar usando esta expresión regular. (OJO: No es un glob-pattern)",
         ),
     ],
 ):
+    compiled_regex = None if regex is None else re.compile(regex)
+
     config = sync_state(config_path=config_path)
     user_bundles = find_users_in_group(config, group_name)
     scandb = read_scandb(db_path, min_time, max_time)
@@ -249,7 +251,7 @@ def generate_report(
         ignore_hidden=ignore_hidden,
         ignore_metadata=ignore_metadata,
         ignore_dirs=ignore_metadata,
-        regex=regex,
+        regex=compiled_regex,
     )
     report: list[ScanReport] = []
     user_bundles.sort(key=lambda bundle: bundle.id)
