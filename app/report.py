@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import gzip
 from pathlib import Path
+import re
 import traceback
 from typing import Annotated
 from pydantic import BaseModel, Field, ValidationError
@@ -32,6 +33,7 @@ class ReportCtx:
     ignore_hidden: bool
     ignore_metadata: bool
     ignore_dirs: bool
+    regex: re.Pattern[str] | None
 
     def subflatten(
         self,
@@ -41,7 +43,16 @@ class ReportCtx:
         homein: tuple[str, ...],
     ):
         is_dir = isinstance(fsinfo.contents, list)
-        if len(homein) == 0 and not (self.ignore_dirs and is_dir):
+        if (
+            len(homein) == 0  # Exclude files above `homein` path
+            and not (
+                self.ignore_dirs and is_dir
+            )  # Exclude directories if ignoring them
+            and (
+                self.regex is None or self.regex.fullmatch(str(path))
+            )  # If regex is present, include only if it matches
+        ):
+            # Include this file/directory in the scan
             out[path] = FileItem(
                 path=path,
                 change=datetime.fromtimestamp(
@@ -210,6 +221,13 @@ def generate_report(
             description="Ignorar cambios de metadata, y solo considerar cambios de contenido en archivos.",
         ),
     ] = True,
+    regex: Annotated[
+        re.Pattern[str] | None,
+        Field(
+            None,
+            description="Filtrar usando esta expresión regular. (OJO: No es un glob-pattern)",
+        ),
+    ],
 ):
     config = sync_state(config_path=config_path)
     user_bundles = find_users_in_group(config, group_name)
@@ -231,6 +249,7 @@ def generate_report(
         ignore_hidden=ignore_hidden,
         ignore_metadata=ignore_metadata,
         ignore_dirs=ignore_metadata,
+        regex=regex,
     )
     report: list[ScanReport] = []
     user_bundles.sort(key=lambda bundle: bundle.id)
