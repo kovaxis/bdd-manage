@@ -243,8 +243,18 @@ def generate_report(
             print(f'No existe el grupo "{group_name}".')
         return
 
+    if not scandb:
+        print(
+            "No hay escaneos"
+            + (" dentro de las fechas entregadas" if min_time or max_time else "")
+            + ". No se generó ningún reporte."
+        )
+        return
+    revscandb = sorted(scandb, key=lambda scan: scan.scantime, reverse=True)
+    print(f"Usando {len(scandb)} reportes, el último con fecha {revscandb[0].scantime}")
+
     ctx = ReportCtx(
-        revscandb=sorted(scandb, key=lambda scan: scan.scantime, reverse=True),
+        revscandb=revscandb,
         cachedscans={},
         subdir=subdir,
         ignore_hidden=ignore_hidden,
