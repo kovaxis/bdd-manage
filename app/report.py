@@ -251,7 +251,7 @@ def generate_report(
         )
         return
     revscandb = sorted(scandb, key=lambda scan: scan.scantime, reverse=True)
-    print(f"Usando {len(scandb)} reportes, el último con fecha {revscandb[0].scantime}")
+    print(f"Usando {len(scandb)} escaneos, el último con fecha {revscandb[0].scantime}")
 
     ctx = ReportCtx(
         revscandb=revscandb,
