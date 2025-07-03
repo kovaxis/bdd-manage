@@ -1,3 +1,7 @@
+"""
+Utilities to run a function in a subprocess (ie. as a different user, or within tmux).
+"""
+
 from collections.abc import Callable
 import getpass
 import os
@@ -25,6 +29,17 @@ R = TypeVar("R", bound=BaseModel)
 def register_subrun_func(id: str, param: type[P], ret: type[R], func: Callable[[P], R]):
     _id_to_func[id] = (func, param, ret)  # type: ignore
     _func_to_id[func] = id  # type: ignore
+
+
+@app.command("_subrun", hidden=True)
+def subrun(id: str) -> None:
+    if id not in _id_to_func:
+        raise RuntimeError("invalid subrun function id")
+    func, param_ty, ret_ty = _id_to_func[id]
+    args = param_ty.model_validate_json(sys.stdin.read())
+    ret = func(args)
+    print()
+    print(ret_ty.model_dump_json(ret))
 
 
 def run_as_user(user: str | None, func: Callable[[P], R], args: P) -> R:
@@ -73,14 +88,3 @@ def run_as_user(user: str | None, func: Callable[[P], R], args: P) -> R:
         except ValidationError:
             pass
     raise RuntimeError("subrun did not print resulting value")
-
-
-@app.command("_subrun", hidden=True)
-def subrun(id: str) -> None:
-    if id not in _id_to_func:
-        raise RuntimeError("invalid subrun function id")
-    func, param_ty, ret_ty = _id_to_func[id]
-    args = param_ty.model_validate_json(sys.stdin.read())
-    ret = func(args)
-    print()
-    print(ret_ty.model_dump_json(ret))
