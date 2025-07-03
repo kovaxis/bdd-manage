@@ -12,10 +12,12 @@ from app.sync import app as sync_app
 from app.run import app as run_app
 from app.report import app as report_app
 from app.canvas import app as canvas_app
+from app.subrun import app as subrun_app
 
 
 app = Typer()
 
+app.add_typer(subrun_app)
 app.add_typer(sync_app)
 app.add_typer(run_app)
 app.add_typer(scan_app)
@@ -37,7 +39,8 @@ def show_status():
 
 
 if __name__ == "__main__":
-    if os.geteuid() == 0:
+    print("argv:", sys.argv)
+    if os.geteuid() == 0 and os.getenv("ALLOW_ROOT") != "true":
         print("userctl should not run as root")
         sys.exit(1)
     og_pwd = os.getenv("ORIGINAL_PWD")

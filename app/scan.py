@@ -11,8 +11,9 @@ from pydantic import (
     BaseModel,
 )
 
+from app.subrun import register_subrun_func, run_as_user
 from app.sync import sync_state
-from app.types import DEFAULT_SCANS_PATH, FsInfo, Scan, UserScan
+from app.types import DEFAULT_SCANS_PATH, Config, FsInfo, Scan, UserScan
 from app.util import exception_context, get_userid, opener_private
 
 app = Typer()
@@ -52,40 +53,38 @@ def scan_path(path: Path) -> FsInfo:
     )
 
 
-@app.command(
-    "scan",
-    help="Escanear las carpetas HOME de los usuarios, agregando el escaneo a una base de datos de instantáneas en el tiempo.",
-)
-def scan_users(
-    *,
-    config_path: Path | None = None,
-    scans_path: Path | None = None,
-    lock: bool = False,
-):
-    scantime = datetime.now()
-    config = sync_state(config_path=config_path)
+class ScanArgs(BaseModel):
+    config: Config
+    scantime: datetime
+    lock: bool
 
-    # Realizar escaneo
-    scan = Scan(scantime=scantime, users={})
+
+class ScanRet(BaseModel):
+    scan: Scan
+
+
+def scan_as_root(p: ScanArgs) -> ScanRet:
     try:
-        if lock:
+        scan = Scan(scantime=p.scantime, users={})
+        if p.lock:
             print("locking users")
-            for group in config.groups:
+            for group in p.config.groups:
                 for user in group.users:
                     subprocess.run(["sudo", "passwd", "-l", get_userid(user, group)])
             print("locked all users")
-        print(f"scanning {sum(len(group.users) for group in config.groups)} users")
-        for group in config.groups:
+        print(f"scanning {sum(len(group.users) for group in p.config.groups)} users")
+        for group in p.config.groups:
             for user in group.users:
                 userid = get_userid(user, group)
                 home = Path(f"/home/{userid}")
                 userscan = UserScan(home=scan_path(home))
                 scan.users[userid] = userscan
                 print(f"scanned user {userid}")
+        return ScanRet(scan=scan)
     finally:
-        if lock:
+        if p.lock:
             print("unlocking users")
-            for group in config.groups:
+            for group in p.config.groups:
                 for user in group.users:
                     try:
                         subprocess.run(
@@ -95,9 +94,53 @@ def scan_users(
                         traceback.print_exc()
             print("unlocked users")
 
+
+register_subrun_func("scan.scan", ScanArgs, ScanRet, scan_as_root)
+
+
+class WriteResultArgs(BaseModel):
+    db_path: Path
+    scan: Scan
+
+
+class WriteResultRet(BaseModel):
+    pass
+
+
+def write_scan_result(p: WriteResultArgs) -> WriteResultRet:
+    with exception_context(f"writing scan to {p.db_path}"):
+        with open(p.db_path, "ab", opener=opener_private) as db_compressed_file:
+            with gzip.open(db_compressed_file, "ab") as db_file:
+                db_file.write((p.scan.model_dump_json() + "\n").encode())
+    return WriteResultRet()
+
+
+register_subrun_func("scan.write", WriteResultArgs, WriteResultRet, write_scan_result)
+
+
+@app.command(
+    "scan",
+    help="Escanear las carpetas HOME de los usuarios, agregando el escaneo a una base de datos de instantáneas en el tiempo.",
+)
+def scan_users(
+    *,
+    config_path: Path | None = None,
+    scans_path: Path | None = None,
+    lock: bool = False,
+    write_result_as_user: str | None = None,
+):
+    scantime = datetime.now()
+    config = sync_state(config_path=config_path)
+
+    # Realizar escaneo
+    scan = run_as_user(
+        "root", scan_as_root, ScanArgs(config=config, scantime=scantime, lock=lock)
+    )
+
     # Agregar escaneo al archivo .scandb
     db_path = scans_path or DEFAULT_SCANS_PATH
-    with exception_context(f"writing scan to {db_path}"):
-        with open(db_path, "ab", opener=opener_private) as db_compressed_file:
-            with gzip.open(db_compressed_file, "ab") as db_file:
-                db_file.write((scan.model_dump_json() + "\n").encode())
+    run_as_user(
+        write_result_as_user,
+        write_scan_result,
+        WriteResultArgs(db_path=db_path, scan=scan.scan),
+    )

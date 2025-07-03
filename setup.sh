@@ -79,8 +79,8 @@ wget -qO- https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/usr/local
 sudo -u $USER uv sync
 echo "export PATH=\$PATH:$PWD/bin" > /etc/profile.d/bdd-manage.sh
 
-# Escanear diariamente
-echo "1 0 * * * $USER $PWD/bin/userctl scan" > /etc/cron.d/bdd-manage-scan
+# Escanear diariamente (como root)
+echo "1 0 * * * root ALLOW_ROOT=true $PWD/bin/userctl scan --write-result-as-user $USER" > /etc/cron.d/bdd-manage-scan
 
 printf "\033[0;32mServidor configurado!\033[0m\n"
 printf "Recuerda crear los usuarios a partir de una lista de alumnos con el comando \033[0;1muserctl\033[0m (puede requerir relogin)\n"
