@@ -197,7 +197,8 @@ def generate_report_for_user(
                 usuario=bundle.id,
                 timestamp_escaneo=scantime,
                 ultimos_cambios="\n".join(
-                    f"{item.change} -> {item.path}" for item in items
+                    f"{item.change.strftime('%Y-%m-%d %H:%M')} -> {item.path}"
+                    for item in items
                 ),
                 tiene_archivo_php="Si" if has_php else "No",
             )
