@@ -7,8 +7,8 @@ from pathlib import Path
 import re
 import traceback
 from typing import Annotated
-from pydantic import BaseModel, Field, ValidationError
-from typer import Argument, Typer
+from pydantic import BaseModel, ValidationError
+from typer import Argument, Option, Typer
 
 from app.scan import FsInfo
 from app.sync import sync_state
@@ -216,42 +216,42 @@ def generate_report(
     db_path: Path | None = None,
     min_time: Annotated[
         datetime | None,
-        Argument(help="Considerar desde este tiempo en adelante."),
+        Option(help="Considerar desde este tiempo en adelante."),
     ] = None,
     max_time: Annotated[
-        datetime | None, Argument(help="Considerar solo hasta este tiempo.")
+        datetime | None, Option(help="Considerar solo hasta este tiempo.")
     ] = None,
-    subdir: Annotated[
-        Path, Argument(help="Considerar solo este subdirectorio.")
-    ] = Path("."),
+    subdir: Annotated[Path, Option(help="Considerar solo este subdirectorio.")] = Path(
+        "."
+    ),
     ignore_hidden: Annotated[
         bool,
-        Field(
-            description="Ignorar archivos que comienzen con '.' para el cálculo de última modificación.",
+        Option(
+            help="Ignorar archivos que comienzen con '.' para el cálculo de última modificación.",
         ),
     ] = True,
     consider_metadata: Annotated[
         bool,
-        Field(
-            description="Considerar cambios de permisos y metadatos (ctime).",
+        Option(
+            help="Considerar cambios de permisos y metadatos (ctime).",
         ),
     ] = False,
     check_prev_scans: Annotated[
-        bool, Argument(help="Revisar escaneos pasados para mayor robustez.")
+        bool, Option(help="Revisar escaneos pasados para mayor robustez.")
     ] = True,
     ignore_dirs: Annotated[
-        bool, Argument(help="Ignorar directorios, y considerar solo archivos.")
+        bool, Option(help="Ignorar directorios, y considerar solo archivos.")
     ] = True,
     report_mode: Annotated[
         ReportMode,
-        Argument(
+        Option(
             help="Reportar las fechas de todos los archivos, el último de cada día, o solo el último global."
         ),
     ] = ReportMode.all,
     regex: Annotated[
         str | None,
-        Field(
-            description="Filtrar usando esta expresión regular. (OJO: NO es un patrón normal, es un regex!)",
+        Option(
+            help="Filtrar usando esta expresión regular. (OJO: NO es un patrón normal, es un regex!)",
         ),
     ] = None,
 ):
