@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import traceback
 from typing import Annotated
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ValidationError
 from typer import Argument, Option, Typer
 
@@ -43,6 +44,7 @@ class ReportCtx:
     ignore_dirs: bool
     regex: re.Pattern[str] | None
     report_mode: ReportMode
+    timezone: ZoneInfo
 
     def subflatten(
         self,
@@ -65,7 +67,8 @@ class ReportCtx:
             out[path] = FileItem(
                 path=path,
                 change=datetime.fromtimestamp(
-                    fsinfo.ctime if self.use_ctime else fsinfo.mtime
+                    fsinfo.ctime if self.use_ctime else fsinfo.mtime,
+                    tz=self.timezone,
                 ),
                 is_dir=is_dir,
                 fsinfo=fsinfo,
@@ -110,6 +113,7 @@ def read_scandb(
     db_path: Path | None,
     min_time: datetime | None,
     max_time: datetime | None,
+    tz: ZoneInfo,
 ) -> list[Scan]:
     db_path = db_path or DEFAULT_SCANS_PATH
     if not db_path.exists():
@@ -126,6 +130,7 @@ def read_scandb(
                     line += 1
                     try:
                         scan = Scan.model_validate_json(scanline)
+                        scan.scantime = scan.scantime.astimezone(tz)
                         if (min_time is None or scan.scantime >= min_time) and (
                             max_time is None or scan.scantime <= max_time
                         ):
@@ -254,12 +259,18 @@ def generate_report(
             help="Filtrar usando esta expresión regular. (OJO: NO es un patrón normal, es un regex!)",
         ),
     ] = None,
+    timezone: str = "America/Santiago",
 ):
     compiled_regex = None if regex is None else re.compile(regex)
+    tz = ZoneInfo(timezone)
+    if min_time is not None:
+        min_time = min_time.astimezone(tz)
+    if max_time is not None:
+        max_time = max_time.astimezone(tz)
 
     config = sync_state(config_path=config_path)
     user_bundles = find_users_in_group(config, group_name)
-    scandb = read_scandb(db_path, min_time, max_time)
+    scandb = read_scandb(db_path, min_time, max_time, tz)
 
     if not user_bundles:
         if sum(len(group.users) for group in config.groups) == 0:
@@ -290,6 +301,7 @@ def generate_report(
         check_prev_scans=check_prev_scans,
         regex=compiled_regex,
         report_mode=report_mode,
+        timezone=tz,
     )
     report: list[ScanReport] = []
     user_bundles.sort(key=lambda bundle: bundle.id)

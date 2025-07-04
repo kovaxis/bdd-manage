@@ -39,7 +39,6 @@ def show_status():
 
 
 if __name__ == "__main__":
-    print("argv:", sys.argv)
     if os.geteuid() == 0 and os.getenv("ALLOW_ROOT") != "true":
         print("userctl should not run as root")
         sys.exit(1)

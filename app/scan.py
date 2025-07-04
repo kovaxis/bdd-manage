@@ -1,7 +1,7 @@
 import gzip
 import math
 from typer import Typer
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import os
@@ -129,7 +129,7 @@ def scan_users(
     lock: bool = False,
     write_result_as_user: str | None = None,
 ):
-    scantime = datetime.now()
+    scantime = datetime.now(timezone.utc)
     config = sync_state(config_path=config_path)
 
     # Realizar escaneo
