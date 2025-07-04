@@ -1,13 +1,13 @@
 import csv
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import gzip
 from pathlib import Path
 import re
 import traceback
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field, ValidationError
-from typer import Typer
+from typer import Argument, Typer
 
 from app.scan import FsInfo
 from app.sync import sync_state
@@ -35,6 +35,7 @@ class ReportCtx:
     check_prev_scans: bool
     ignore_dirs: bool
     regex: re.Pattern[str] | None
+    report_mode: Literal["all", "daily", "latest"]
 
     def subflatten(
         self,
@@ -93,8 +94,7 @@ class ScanReport(BaseModel):
     """
 
     usuario: str
-    ultimo_cambio_detectado: str
-    ultimo_archivo_cambiado: str
+    ultimos_cambios: str
     timestamp_escaneo: str
     tiene_archivo_php: str
 
@@ -162,28 +162,37 @@ def generate_report_for_user(
                 key=lambda item: (item.change, not item.is_dir, item.path),
                 reverse=True,
             )
+            match ctx.report_mode:
+                case "all":
+                    # Nothing to do
+                    pass
+                case "latest":
+                    # Remove all but the last
+                    items = items[:1]
+                case "daily":
+                    # Remove all but the newest for each day
+                    last_day = (items[0].change + timedelta(days=3)).date()
+
+                    def include_item(item: FileItem) -> bool:
+                        nonlocal last_day
+                        do_include = item.change.date() < last_day
+                        last_day = item.change.date()
+                        return do_include
+
+                    items = [item for item in items if include_item(item)]
             has_php = any(item.path.suffix == ".php" for item in items)
-            if items:
-                return ScanReport(
-                    usuario=bundle.id,
-                    timestamp_escaneo=scantime,
-                    ultimo_archivo_cambiado=str(items[0].path),
-                    ultimo_cambio_detectado=str(items[0].change),
-                    tiene_archivo_php="Si" if has_php else "No",
-                )
-            else:
-                return ScanReport(
-                    usuario=bundle.id,
-                    timestamp_escaneo=scantime,
-                    ultimo_archivo_cambiado="No hay archivos",
-                    ultimo_cambio_detectado="",
-                    tiene_archivo_php="Si" if has_php else "No",
-                )
+            return ScanReport(
+                usuario=bundle.id,
+                timestamp_escaneo=scantime,
+                ultimos_cambios="\n".join(
+                    f"{item.change} -> {item.path}" for item in items
+                ),
+                tiene_archivo_php="Si" if has_php else "No",
+            )
     return ScanReport(
         usuario=bundle.id,
         timestamp_escaneo="No hay escaneos para este usuario",
-        ultimo_archivo_cambiado="",
-        ultimo_cambio_detectado="",
+        ultimos_cambios="",
         tiene_archivo_php="No",
     )
 
@@ -192,23 +201,21 @@ def generate_report_for_user(
 def generate_report(
     group_name: Annotated[
         str | None,
-        Field(description="Generar reporte solo para los usuarios en este grupo."),
+        Argument(help="Generar reporte solo para los usuarios en este grupo."),
     ],
-    out: Annotated[
-        Path, Field(description="Dónde guardar el .csv generado como reporte.")
-    ],
+    out: Annotated[Path, Argument(help="Dónde guardar el .csv generado como reporte.")],
     *,
     config_path: Path | None = None,
     db_path: Path | None = None,
     min_time: Annotated[
         datetime | None,
-        Field(description="Considerar desde este tiempo en adelante."),
+        Argument(help="Considerar desde este tiempo en adelante."),
     ] = None,
     max_time: Annotated[
-        datetime | None, Field(description="Considerar solo hasta este tiempo.")
+        datetime | None, Argument(help="Considerar solo hasta este tiempo.")
     ] = None,
     subdir: Annotated[
-        Path, Field(description="Considerar solo este subdirectorio.")
+        Path, Argument(help="Considerar solo este subdirectorio.")
     ] = Path("."),
     ignore_hidden: Annotated[
         bool,
@@ -223,15 +230,21 @@ def generate_report(
         ),
     ] = False,
     check_prev_scans: Annotated[
-        bool, Field(description="Revisar escaneos pasados para mayor robustez.")
+        bool, Argument(help="Revisar escaneos pasados para mayor robustez.")
     ] = True,
     ignore_dirs: Annotated[
-        bool, Field(description="Ignorar directorios, y considerar solo archivos.")
+        bool, Argument(help="Ignorar directorios, y considerar solo archivos.")
     ] = True,
+    report_mode: Annotated[
+        Literal["all", "daily", "latest"],
+        Argument(
+            help="Reportar las fechas de todos los archivos, el último de cada día, o solo el último global."
+        ),
+    ] = "all",
     regex: Annotated[
         str | None,
         Field(
-            description="Filtrar usando esta expresión regular. (OJO: No es un glob-pattern)",
+            description="Filtrar usando esta expresión regular. (OJO: NO es un patrón normal, es un regex!)",
         ),
     ] = None,
 ):
@@ -269,6 +282,7 @@ def generate_report(
         ignore_dirs=ignore_dirs,
         check_prev_scans=check_prev_scans,
         regex=compiled_regex,
+        report_mode=report_mode,
     )
     report: list[ScanReport] = []
     user_bundles.sort(key=lambda bundle: bundle.id)
