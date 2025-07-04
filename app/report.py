@@ -1,11 +1,12 @@
 import csv
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import Enum
 import gzip
 from pathlib import Path
 import re
 import traceback
-from typing import Annotated, Literal
+from typing import Annotated
 from pydantic import BaseModel, Field, ValidationError
 from typer import Argument, Typer
 
@@ -25,6 +26,12 @@ class FileItem:
     fsinfo: FsInfo
 
 
+class ReportMode(str, Enum):
+    all = "all"
+    daily = "daily"
+    latest = "latest"
+
+
 @dataclass
 class ReportCtx:
     revscandb: list[Scan]
@@ -35,7 +42,7 @@ class ReportCtx:
     check_prev_scans: bool
     ignore_dirs: bool
     regex: re.Pattern[str] | None
-    report_mode: Literal["all", "daily", "latest"]
+    report_mode: ReportMode
 
     def subflatten(
         self,
@@ -163,13 +170,13 @@ def generate_report_for_user(
                 reverse=True,
             )
             match ctx.report_mode:
-                case "all":
+                case ReportMode.all:
                     # Nothing to do
                     pass
-                case "latest":
+                case ReportMode.latest:
                     # Remove all but the last
                     items = items[:1]
-                case "daily":
+                case ReportMode.daily:
                     # Remove all but the newest for each day
                     last_day = (items[0].change + timedelta(days=3)).date()
 
@@ -236,11 +243,11 @@ def generate_report(
         bool, Argument(help="Ignorar directorios, y considerar solo archivos.")
     ] = True,
     report_mode: Annotated[
-        Literal["all", "daily", "latest"],
+        ReportMode,
         Argument(
             help="Reportar las fechas de todos los archivos, el último de cada día, o solo el último global."
         ),
-    ] = "all",
+    ] = ReportMode.all,
     regex: Annotated[
         str | None,
         Field(
