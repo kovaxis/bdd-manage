@@ -31,7 +31,8 @@ class ReportCtx:
     cachedscans: dict[int, dict[str, dict[Path, FileItem] | None]]
     subdir: Path
     ignore_hidden: bool
-    ignore_metadata: bool
+    use_ctime: bool
+    check_prev_scans: bool
     ignore_dirs: bool
     regex: re.Pattern[str] | None
 
@@ -56,7 +57,7 @@ class ReportCtx:
             out[path] = FileItem(
                 path=path,
                 change=datetime.fromtimestamp(
-                    fsinfo.mtime if self.ignore_metadata else fsinfo.ctime
+                    fsinfo.ctime if self.use_ctime else fsinfo.mtime
                 ),
                 is_dir=is_dir,
                 fsinfo=fsinfo,
@@ -138,7 +139,7 @@ def generate_report_for_user(
         scan = ctx.getscan(i, bundle.id)
         if scan is not None:
             scantime = str(ctx.revscandb[i].scantime)
-            if ctx.ignore_metadata:
+            if ctx.check_prev_scans:
                 # Chequear hashes pasados de los contenidos del archivo
                 for item in scan.values():
                     current_hash = item.fsinfo.contents
@@ -215,11 +216,17 @@ def generate_report(
             description="Ignorar archivos que comienzen con '.' para el cálculo de última modificación.",
         ),
     ] = True,
-    ignore_metadata: Annotated[
+    consider_metadata: Annotated[
         bool,
         Field(
-            description="Ignorar cambios de metadata, y solo considerar cambios de contenido en archivos.",
+            description="Considerar cambios de permisos y metadatos (ctime).",
         ),
+    ] = False,
+    check_prev_scans: Annotated[
+        bool, Field(description="Revisar escaneos pasados para mayor robustez.")
+    ] = True,
+    ignore_dirs: Annotated[
+        bool, Field(description="Ignorar directorios, y considerar solo archivos.")
     ] = True,
     regex: Annotated[
         str | None,
@@ -258,8 +265,9 @@ def generate_report(
         cachedscans={},
         subdir=subdir,
         ignore_hidden=ignore_hidden,
-        ignore_metadata=ignore_metadata,
-        ignore_dirs=ignore_metadata,
+        use_ctime=consider_metadata,
+        ignore_dirs=ignore_dirs,
+        check_prev_scans=check_prev_scans,
         regex=compiled_regex,
     )
     report: list[ScanReport] = []
